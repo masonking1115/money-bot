@@ -62,3 +62,8 @@ def test_settings_has_sec_user_agent_default(monkeypatch):
     monkeypatch.delenv("MONEYBOT_SEC_USER_AGENT", raising=False)
     settings = Settings()
     assert "moneybot" in settings.sec_user_agent.lower()
+
+
+def test_settings_default_strategy(monkeypatch):
+    monkeypatch.delenv("MONEYBOT_STRATEGY", raising=False)
+    assert Settings().strategy == "catalyst_driven"

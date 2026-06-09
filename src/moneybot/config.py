@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     model_deep_read: str = "claude-sonnet-4-6"
     model_analyst: str = "claude-opus-4-8"
 
+    # Active strategy (resolved via moneybot.strategies.registry)
+    strategy: str = "catalyst_driven"
+
 
 class TickerMeta(BaseModel):
     symbol: str
