@@ -12,6 +12,10 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING
 
+from pydantic import ValidationError
+
+from moneybot.analyst.models import ConfirmationVerdict
+from moneybot.analyst.prompt import build_confirm_system, build_confirm_user, confirm_schema
 from moneybot.analyst.relative_strength import excess_return
 from moneybot.memory.models import MemoryContext
 
@@ -21,6 +25,7 @@ if TYPE_CHECKING:
     from moneybot.llm.client import LLMClient
     from moneybot.memory.retriever import MemoryRetriever
     from moneybot.strategies.base import Strategy
+    from moneybot.strategies.models import CatalystSignal, Proposal
 
 
 class AnalystAgent:
@@ -58,3 +63,30 @@ class AnalystAgent:
         if self.retriever is None:
             return MemoryContext()
         return self.retriever.retrieve([ticker], self.data.universe.sector)
+
+    def _confirm(
+        self,
+        proposal: Proposal,
+        signal: CatalystSignal | None,
+        memory: MemoryContext,
+        *,
+        relative_strength: float,
+    ) -> ConfirmationVerdict:
+        """One Opus call to independently rule on a thesis. Malformed output = reject."""
+        result = self.llm.complete_json(
+            model=self.settings.model_analyst,
+            system=build_confirm_system(memory, proposal.ticker),
+            user=build_confirm_user(
+                proposal, signal, relative_strength=relative_strength
+            ),
+            schema=confirm_schema(),
+        )
+        try:
+            return ConfirmationVerdict.model_validate(result)
+        except ValidationError:
+            # Never trade on an unparseable analyst response — treat as a rejection.
+            return ConfirmationVerdict(
+                confirmed=False,
+                adjusted_conviction=0.0,
+                reasoning="unparseable analyst response",
+            )

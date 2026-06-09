@@ -2,8 +2,11 @@ import pandas as pd
 import pytest
 
 from moneybot.analyst.agent import AnalystAgent
+from moneybot.analyst.models import ConfirmationVerdict
+from moneybot.analyst.prompt import confirm_schema
 from moneybot.config import Settings, TickerMeta, Universe
 from moneybot.memory.models import MemoryContext
+from moneybot.strategies.models import CatalystSignal, Evidence, Proposal
 
 
 class ScriptedLLM:
@@ -121,3 +124,68 @@ def test_memory_context_uses_retriever_with_ticker_and_sector():
     )
     agent._memory_context("NVDA")
     assert retriever.calls == [(["NVDA"], "semiconductors")]
+
+
+def _proposal():
+    return Proposal(
+        ticker="NVDA",
+        action="buy",
+        conviction=0.8,
+        thesis="guidance raised on datacenter demand",
+        score=0.55,
+        signal_ref="sig-1",
+    )
+
+
+def _signal():
+    return CatalystSignal(
+        ticker="NVDA",
+        category="guidance",
+        direction="bullish",
+        materiality=0.9,
+        freshness_days=2,
+        conviction=0.8,
+        evidence=[Evidence(source="8-K", quote="raised FY guidance", url="https://sec/1")],
+        thesis="guidance raised on datacenter demand",
+        signal_id="sig-1",
+    )
+
+
+def test_confirm_uses_analyst_model_and_confirm_schema():
+    llm = ScriptedLLM(
+        [{"confirmed": True, "adjusted_conviction": 0.75, "reasoning": "durable demand"}]
+    )
+    agent = AnalystAgent(
+        data_layer=FakeData({}), strategy=object(), llm=llm, settings=_settings()
+    )
+    verdict = agent._confirm(_proposal(), _signal(), MemoryContext(), relative_strength=0.1)
+    assert isinstance(verdict, ConfirmationVerdict)
+    assert verdict.confirmed is True
+    assert verdict.adjusted_conviction == 0.75
+    assert llm.requests[0]["model"] == "claude-opus-4-8"   # the analyst tier
+    assert llm.requests[0]["schema"] == confirm_schema()
+
+
+def test_confirm_treats_malformed_response_as_rejection():
+    # adjusted_conviction out of range -> ValidationError -> safe rejection, no raise
+    llm = ScriptedLLM(
+        [{"confirmed": True, "adjusted_conviction": 9.9, "reasoning": "bad"}]
+    )
+    agent = AnalystAgent(
+        data_layer=FakeData({}), strategy=object(), llm=llm, settings=_settings()
+    )
+    verdict = agent._confirm(_proposal(), _signal(), MemoryContext(), relative_strength=0.0)
+    assert verdict.confirmed is False
+    assert verdict.adjusted_conviction == 0.0
+
+
+def test_confirm_passes_evidence_into_prompt():
+    llm = ScriptedLLM(
+        [{"confirmed": True, "adjusted_conviction": 0.6, "reasoning": "ok"}]
+    )
+    agent = AnalystAgent(
+        data_layer=FakeData({}), strategy=object(), llm=llm, settings=_settings()
+    )
+    agent._confirm(_proposal(), _signal(), MemoryContext(), relative_strength=0.1)
+    user = llm.requests[0]["user"]
+    assert "raised FY guidance" in user and "https://sec/1" in user
