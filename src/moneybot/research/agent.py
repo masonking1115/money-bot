@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from moneybot.research.prompt import (
+    TRIAGE_SYSTEM,
     SourceDoc,
     build_triage_user,
     wrap_triage_schema,
@@ -45,7 +46,7 @@ class ResearchAgent:
             return []
         result = self.llm.complete_json(
             model=self.settings.model_triage,
-            system="You are a fast triage filter for trading research.",
+            system=TRIAGE_SYSTEM,
             user=build_triage_user(ticker, sources),
             schema=wrap_triage_schema(),
         )

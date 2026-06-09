@@ -21,6 +21,8 @@ _GROUNDING_RULE = (
     "ticker {ticker}."
 )
 
+TRIAGE_SYSTEM = "You are a fast triage filter for trading research."
+
 
 @dataclass(frozen=True)
 class SourceDoc:

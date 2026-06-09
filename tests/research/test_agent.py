@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from moneybot.config import Settings
 from moneybot.models import Filing, NewsItem
 from moneybot.research.agent import ResearchAgent
-from moneybot.research.prompt import collect_sources
+from moneybot.research.prompt import build_triage_user, collect_sources
 
 
 class ScriptedLLM:
@@ -39,6 +39,7 @@ def test_triage_uses_triage_model_and_returns_selected_sources():
     selected = agent._triage("NVDA", _sources())
     assert [s.index for s in selected] == [1]
     assert llm.requests[0]["model"] == "claude-haiku-4-5"  # cheap tier
+    assert llm.requests[0]["user"] == build_triage_user("NVDA", _sources())
 
 
 def test_triage_ignores_out_of_range_indices():
