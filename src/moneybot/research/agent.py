@@ -36,9 +36,9 @@ class ResearchAgent:
     def __init__(
         self,
         *,
-        data_layer: DataLayer | None,
-        retriever: MemoryRetriever | None,
-        strategy: Strategy | None,
+        data_layer: DataLayer,
+        retriever: MemoryRetriever | None = None,
+        strategy: Strategy,
         llm: LLMClient,
         settings: Settings,
     ) -> None:

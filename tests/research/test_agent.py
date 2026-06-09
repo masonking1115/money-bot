@@ -42,8 +42,9 @@ def _sources():
 
 def test_triage_uses_triage_model_and_returns_selected_sources():
     llm = ScriptedLLM([{"relevant_indices": [1]}])
-    agent = ResearchAgent(data_layer=None, retriever=None,
-                          strategy=None, llm=llm, settings=_settings())
+    # _triage uses neither data_layer nor strategy
+    agent = ResearchAgent(data_layer=object(), strategy=object(),
+                          llm=llm, settings=_settings())
     selected = agent._triage("NVDA", _sources())
     assert [s.index for s in selected] == [1]
     assert llm.requests[0]["model"] == "claude-haiku-4-5"  # cheap tier
@@ -52,16 +53,18 @@ def test_triage_uses_triage_model_and_returns_selected_sources():
 
 def test_triage_ignores_out_of_range_indices():
     llm = ScriptedLLM([{"relevant_indices": [1, 99]}])  # 99 is not a real source
-    agent = ResearchAgent(data_layer=None, retriever=None,
-                          strategy=None, llm=llm, settings=_settings())
+    # _triage uses neither data_layer nor strategy
+    agent = ResearchAgent(data_layer=object(), strategy=object(),
+                          llm=llm, settings=_settings())
     selected = agent._triage("NVDA", _sources())
     assert [s.index for s in selected] == [1]
 
 
 def test_triage_with_no_sources_skips_llm_call():
     llm = ScriptedLLM([])  # no responses queued; must not be called
-    agent = ResearchAgent(data_layer=None, retriever=None,
-                          strategy=None, llm=llm, settings=_settings())
+    # _triage uses neither data_layer nor strategy
+    agent = ResearchAgent(data_layer=object(), strategy=object(),
+                          llm=llm, settings=_settings())
     assert agent._triage("NVDA", []) == []
     assert llm.requests == []
 
