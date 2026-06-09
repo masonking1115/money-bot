@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING
 
+from moneybot.memory.models import MemoryContext
 from moneybot.research.prompt import (
     TRIAGE_SYSTEM,
     SourceDoc,
@@ -26,7 +27,6 @@ if TYPE_CHECKING:
     from moneybot.config import Settings
     from moneybot.data_layer import DataLayer
     from moneybot.llm.client import LLMClient
-    from moneybot.memory.models import MemoryContext
     from moneybot.memory.retriever import MemoryRetriever
     from moneybot.strategies.base import Strategy
     from moneybot.strategies.models import CatalystSignal
@@ -62,9 +62,7 @@ class ResearchAgent:
         return [s for s in sources if s.index in wanted]
 
     def _memory_context(self, ticker: str) -> MemoryContext:
-        from moneybot.memory.models import MemoryContext
-
-        if self.retriever is None:
+        if self.retriever is None or self.data is None:
             return MemoryContext()
         return self.retriever.retrieve([ticker], self.data.universe.sector)
 
@@ -104,7 +102,7 @@ class ResearchAgent:
     def research_universe(
         self, as_of: date | None = None
     ) -> dict[str, list[CatalystSignal]]:
-        """Research every name in the universe (the benchmark ETF is skipped)."""
+        """Research each name in `self.data.universe.symbols` (which excludes the benchmark)."""
         return {
             symbol: self.research_ticker(symbol, as_of=as_of)
             for symbol in self.data.universe.symbols

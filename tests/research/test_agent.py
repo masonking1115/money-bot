@@ -162,6 +162,25 @@ def test_research_universe_covers_all_symbols(tmp_path):
     assert set(out.keys()) == {"NVDA", "AMD"}
     assert len(out["NVDA"]) == 1
     assert out["AMD"] == []
+    assert all(s.ticker == "NVDA" for s in out["NVDA"])
+
+
+def test_memory_context_flows_into_deep_read_system(tmp_path):
+    retriever = _retriever(tmp_path)
+    # seed a sector dossier via the SemanticStore's real write API:
+    retriever.semantic.upsert("sector:semiconductors", "NVDA drives AI capex.")
+    llm = ScriptedLLM([
+        {"relevant_indices": [0, 1]},
+        {"signals": [_good_signal()]},
+    ])
+    agent = ResearchAgent(
+        data_layer=_datalayer(tmp_path), retriever=retriever,
+        strategy=CatalystDrivenLong(), llm=llm, settings=_settings(),
+    )
+    agent.research_ticker("NVDA")
+    deep_system = llm.requests[1]["system"]
+    assert "OPERATOR KNOWLEDGE" in deep_system
+    assert "NVDA drives AI capex." in deep_system
 
 
 def test_research_ticker_passes_as_of_to_datalayer(tmp_path):
