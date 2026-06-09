@@ -75,3 +75,47 @@ def test_complete_json_raises_on_unparseable_text():
         Adapter(client=object()).complete_json(
             model="claude-sonnet-4-6", system="s", user="u", schema={"type": "object"}
         )
+
+
+def test_complete_json_raises_when_model_returns_json_array():
+    class Adapter(AnthropicClient):
+        def _create_message(self, **kwargs):
+            return FakeMessage("[1, 2, 3]")
+
+    with pytest.raises(ValueError, match="expected a JSON object"):
+        Adapter(client=object()).complete_json(
+            model="claude-sonnet-4-6", system="s", user="u", schema={"type": "object"}
+        )
+
+
+def test_complete_json_raises_on_empty_content():
+    class FakeEmptyMessage:
+        content = []
+
+    class Adapter(AnthropicClient):
+        def _create_message(self, **kwargs):
+            return FakeEmptyMessage()
+
+    with pytest.raises(ValueError, match="no text content block"):
+        Adapter(client=object()).complete_json(
+            model="claude-sonnet-4-6", system="s", user="u", schema={"type": "object"}
+        )
+
+
+def test_complete_json_skips_leading_thinking_block():
+    class FakeThinkingBlock:
+        def __init__(self, thinking):
+            self.thinking = thinking  # note: no `.text` attribute, like a real thinking block
+
+    class FakeMixedMessage:
+        def __init__(self):
+            self.content = [FakeThinkingBlock("reasoning..."), FakeContentBlock('{"ok": true}')]
+
+    class Adapter(AnthropicClient):
+        def _create_message(self, **kwargs):
+            return FakeMixedMessage()
+
+    out = Adapter(client=object()).complete_json(
+        model="claude-sonnet-4-6", system="s", user="u", schema={"type": "object"}
+    )
+    assert out == {"ok": True}

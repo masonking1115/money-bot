@@ -52,7 +52,15 @@ class AnthropicClient(LLMClient):
             kwargs["thinking"] = {"type": "adaptive"}
 
         message = self._create_message(**kwargs)
-        text = message.content[0].text
+        # Adaptive thinking can place a thinking block before the text block, so
+        # scan for the first block carrying text rather than assuming content[0].
+        text = next(
+            (t for b in message.content if (t := getattr(b, "text", None)) is not None),
+            None,
+        )
+        if text is None:
+            kinds = [type(b).__name__ for b in message.content]
+            raise ValueError(f"no text content block in model response (blocks: {kinds})")
         try:
             parsed = json.loads(text)
         except (json.JSONDecodeError, TypeError) as exc:
