@@ -110,13 +110,13 @@ class DataLayer:
             raise ValueError("no news provider configured")
 
         if as_of is not None:
-            return self.news.get_news(ticker, since=since, as_of=as_of)
+            return self.news.get_news(query=ticker, since=since, as_of=as_of)
 
         key = f"news:{ticker}:{since or 'none'}"
         cached = self.cache.get_json(key)
         if cached is not None:
             return [NewsItem.model_validate(d) for d in cached]
-        items = self.news.get_news(ticker, since=since)
+        items = self.news.get_news(query=ticker, since=since)
         self.cache.set_json(key, [n.model_dump(mode="json") for n in items])
         return items
 

@@ -192,3 +192,15 @@ def test_get_fundamentals_returns_and_caches(tmp_path):
     assert out.market_cap == 1.0
     dl.get_fundamentals("NVDA")
     assert fund.calls == 1
+
+
+def test_get_news_requires_provider(tmp_path):
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path))
+    with pytest.raises(ValueError, match="no news provider"):
+        dl.get_news("NVDA")
+
+
+def test_get_fundamentals_requires_provider(tmp_path):
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path))
+    with pytest.raises(ValueError, match="no fundamentals provider"):
+        dl.get_fundamentals("NVDA")
