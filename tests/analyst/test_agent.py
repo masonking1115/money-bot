@@ -321,3 +321,30 @@ def test_analyze_threads_as_of_into_relative_strength():
     as_of = _date(2026, 6, 5)
     agent.analyze({"NVDA": [_fresh_signal("NVDA")]}, as_of=as_of)
     assert all(c[3] == as_of for c in data.bars_calls)  # bars fetched point-in-time
+
+
+def test_analyze_does_not_cross_contaminate_when_signal_ids_are_none():
+    def _none_id_signal(ticker):
+        return CatalystSignal(
+            ticker=ticker, category="guidance", direction="bullish",
+            materiality=0.9, freshness_days=1, conviction=0.8,
+            evidence=[Evidence(source="8-K", quote=f"{ticker} raised guidance",
+                               url=f"https://sec/{ticker}")],
+            thesis=f"{ticker} guidance raised", signal_id=None,
+        )
+
+    llm = ScriptedLLM([
+        {"confirmed": True, "adjusted_conviction": 0.7, "reasoning": "ok"},
+        {"confirmed": True, "adjusted_conviction": 0.6, "reasoning": "ok"},
+    ])
+    agent = AnalystAgent(
+        data_layer=_universe_data(), strategy=CatalystDrivenLong(),
+        llm=llm, settings=_settings(),
+    )
+    research = {"NVDA": [_none_id_signal("NVDA")], "AMD": [_none_id_signal("AMD")]}
+    agent.analyze(research)
+    # signal_ref is None for both -> excluded from by_id -> _confirm gets signal=None,
+    # so NO ticker-specific evidence url should appear in ANY confirmation prompt.
+    for req in llm.requests:
+        assert "https://sec/NVDA" not in req["user"]
+        assert "https://sec/AMD" not in req["user"]

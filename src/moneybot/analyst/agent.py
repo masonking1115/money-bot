@@ -101,11 +101,10 @@ class AnalystAgent:
         if not signals:
             return []
 
-        by_id = {s.signal_id: s for s in signals}
+        by_id = {s.signal_id: s for s in signals if s.signal_id is not None}
         rs = self._relative_strength(as_of=as_of)
         ranked = self.strategy.rank(signals, rs)
         shortlist = ranked[: self.settings.analyst_shortlist]
-        exit_plan = self.strategy.exit_plan()
 
         plans: list[TradePlan] = []
         for proposal in shortlist:
@@ -124,7 +123,7 @@ class AnalystAgent:
                     thesis=proposal.thesis,
                     score=proposal.score,
                     signal_ref=proposal.signal_ref,
-                    exit_plan=exit_plan,
+                    exit_plan=self.strategy.exit_plan(),
                     analyst_note=verdict.reasoning,
                     risk_flags=verdict.risk_flags,
                 )
