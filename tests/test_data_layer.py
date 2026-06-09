@@ -204,3 +204,46 @@ def test_get_fundamentals_requires_provider(tmp_path):
     dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path))
     with pytest.raises(ValueError, match="no fundamentals provider"):
         dl.get_fundamentals("NVDA")
+
+
+def test_get_news_rejects_future_items_from_noncompliant_provider(tmp_path):
+    from datetime import datetime, timezone
+
+    class LeakyNews:
+        def get_news(self, query, since=None, as_of=None):
+            return [NewsItem(title="future", url="https://n/9",
+                             published_at=datetime(2026, 6, 11, tzinfo=timezone.utc),
+                             source="leak")]  # ignores as_of on purpose
+
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path), news_provider=LeakyNews())
+    with pytest.raises(ValueError, match="after as_of"):
+        dl.get_news("NVDA", as_of=date(2026, 6, 10))
+
+
+def test_get_news_outside_universe_rejected(tmp_path):
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path), news_provider=StubNews())
+    with pytest.raises(ValueError, match="not in universe"):
+        dl.get_news("TSLA")
+
+
+def test_get_fundamentals_outside_universe_rejected(tmp_path):
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path),
+                   fundamentals_provider=StubFundamentals())
+    with pytest.raises(ValueError, match="not in universe"):
+        dl.get_fundamentals("TSLA")
+
+
+def test_get_news_as_of_bypasses_cache(tmp_path):
+    news = StubNews()
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path), news_provider=news)
+    dl.get_news("NVDA", as_of=date(2026, 6, 9))
+    dl.get_news("NVDA", as_of=date(2026, 6, 9))
+    assert news.calls == 2
+
+
+def test_get_fundamentals_as_of_bypasses_cache(tmp_path):
+    fund = StubFundamentals()
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path), fundamentals_provider=fund)
+    dl.get_fundamentals("NVDA", as_of=date(2026, 6, 9))
+    dl.get_fundamentals("NVDA", as_of=date(2026, 6, 9))
+    assert fund.calls == 2

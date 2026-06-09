@@ -90,7 +90,7 @@ class DataLayer:
                     )
             return filings
 
-        type_key = ",".join(sorted(types)) if types else "all"
+        type_key = "|".join(sorted(types)) if types else "all"
         key = f"filings:{ticker}:{type_key}:{since or 'none'}"
         cached = self.cache.get_json(key)
         if cached is not None:
@@ -110,7 +110,13 @@ class DataLayer:
             raise ValueError("no news provider configured")
 
         if as_of is not None:
-            return self.news.get_news(query=ticker, since=since, as_of=as_of)
+            items = self.news.get_news(query=ticker, since=since, as_of=as_of)
+            for n in items:
+                if n.published_at.date() > as_of:
+                    raise ValueError(
+                        f"provider returned news after as_of={as_of} (point-in-time violation)"
+                    )
+            return items
 
         key = f"news:{ticker}:{since or 'none'}"
         cached = self.cache.get_json(key)

@@ -47,6 +47,8 @@ class EdgarFilingsProvider:
 
         data = self._fetch_submissions(cik10)
         recent = data.get("filings", {}).get("recent", {})
+        # Phase-1: only filings.recent (newest ~1000) is read; older
+        # filings.files batches are not paginated yet.
         forms = recent.get("form", [])
         dates = recent.get("filingDate", [])
         accs = recent.get("accessionNumber", [])
