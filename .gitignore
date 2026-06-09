@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets & config
+.env
+.env.*
+!.env.example
+secrets.*
+*.key
+
+# Data & caches (the bot's local cache / parquet / sqlite)
+data/
+cache/
+*.sqlite
+*.db
+*.parquet
+
+# Logs & run artifacts
+logs/
+*.log
+runs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
