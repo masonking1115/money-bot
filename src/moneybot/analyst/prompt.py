@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from moneybot.memory.models import MemoryContext
+
 if TYPE_CHECKING:
-    from moneybot.memory.models import MemoryContext
     from moneybot.strategies.models import CatalystSignal, Proposal
 
 _ANALYST_SYSTEM = """\
