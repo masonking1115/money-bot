@@ -74,6 +74,31 @@ def test_make_signal_id_changes_with_evidence_urls():
                         materiality=0.8, freshness_days=2, conviction=0.7,
                         evidence=[{"source": "s", "quote": "q", "url": "https://sec/1"}],
                         thesis="t")
-    s2 = s1.model_copy(update={"evidence": [
-        {"source": "s", "quote": "q", "url": "https://news/1"}]})
+    s2 = CatalystSignal.model_validate({
+        "ticker": "NVDA", "category": "guidance", "direction": "bullish",
+        "materiality": 0.8, "freshness_days": 2, "conviction": 0.7,
+        "evidence": [{"source": "s", "quote": "q", "url": "https://news/1"}],
+        "thesis": "t",
+    })
     assert make_signal_id(s1) != make_signal_id(s2)
+
+
+def test_lowercase_ticker_is_matched_and_canonicalized():
+    out = validate_signals([_raw(ticker="nvda")], ticker="NVDA", allowed_urls=ALLOWED)
+    assert len(out) == 1
+    assert out[0].ticker == "NVDA"  # canonicalized to requested form
+
+
+def test_batch_filters_independently_preserving_order():
+    signals = [
+        _raw(ticker="AMD"),                                    # wrong ticker -> dropped
+        _raw(url="https://sec/1"),                             # valid -> kept (first)
+        _raw(evidence=[]),                                     # no evidence -> dropped
+        _raw(url="https://news/1", thesis="T2."),              # valid -> kept (second)
+        _raw(evidence=[{"source": "x", "quote": "q",
+                        "url": "https://hallucinated/9"}]),    # ungrounded -> dropped
+    ]
+    out = validate_signals(signals, ticker="NVDA", allowed_urls=ALLOWED)
+    assert len(out) == 2
+    assert out[0].thesis == "Guidance raised."   # the default _raw thesis, kept first
+    assert out[1].thesis == "T2."                # kept second, order preserved

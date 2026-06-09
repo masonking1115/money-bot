@@ -18,18 +18,9 @@ from pydantic import ValidationError
 from moneybot.strategies.models import CatalystSignal
 
 
-def _evidence_url(e: Any) -> str:
-    """Read a URL from an Evidence model or a raw dict.
-
-    model_copy(update=...) does not re-validate, so signal.evidence may hold
-    plain dicts rather than Evidence instances; handle both.
-    """
-    return e.url if hasattr(e, "url") else e["url"]
-
-
 def make_signal_id(signal: CatalystSignal) -> str:
     """Content hash over the fields that define a distinct catalyst."""
-    urls = "|".join(sorted(_evidence_url(e) for e in signal.evidence))
+    urls = "|".join(sorted(e.url for e in signal.evidence))
     payload = f"{signal.ticker}|{signal.category}|{signal.thesis}|{urls}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
@@ -48,12 +39,18 @@ def validate_signals(
         except ValidationError:
             continue  # malformed -> skip, never raise on model output
 
-        if signal.ticker != ticker:
+        # Match case/whitespace-insensitively — LLM output varies — but store the
+        # canonical requested ticker on surviving signals.
+        if signal.ticker.strip().upper() != ticker.strip().upper():
             continue
         if not signal.evidence:
             continue
         if any(e.url not in allowed_urls for e in signal.evidence):
             continue  # any ungrounded citation invalidates the signal
 
-        valid.append(signal.model_copy(update={"signal_id": make_signal_id(signal)}))
+        valid.append(
+            signal.model_copy(
+                update={"ticker": ticker, "signal_id": make_signal_id(signal)}
+            )
+        )
     return valid
