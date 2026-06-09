@@ -189,3 +189,16 @@ def test_confirm_passes_evidence_into_prompt():
     agent._confirm(_proposal(), _signal(), MemoryContext(), relative_strength=0.1)
     user = llm.requests[0]["user"]
     assert "raised FY guidance" in user and "https://sec/1" in user
+
+
+def test_confirm_treats_unparseable_json_as_rejection():
+    class RaisingLLM:
+        def complete_json(self, *, model, system, user, schema):
+            raise ValueError("could not parse JSON")
+
+    agent = AnalystAgent(
+        data_layer=FakeData({}), strategy=object(), llm=RaisingLLM(), settings=_settings()
+    )
+    verdict = agent._confirm(_proposal(), _signal(), MemoryContext(), relative_strength=0.0)
+    assert verdict.confirmed is False
+    assert verdict.adjusted_conviction == 0.0

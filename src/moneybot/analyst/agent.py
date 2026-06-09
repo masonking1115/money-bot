@@ -73,18 +73,18 @@ class AnalystAgent:
         relative_strength: float,
     ) -> ConfirmationVerdict:
         """One Opus call to independently rule on a thesis. Malformed output = reject."""
-        result = self.llm.complete_json(
-            model=self.settings.model_analyst,
-            system=build_confirm_system(memory, proposal.ticker),
-            user=build_confirm_user(
-                proposal, signal, relative_strength=relative_strength
-            ),
-            schema=confirm_schema(),
-        )
         try:
+            result = self.llm.complete_json(
+                model=self.settings.model_analyst,
+                system=build_confirm_system(memory, proposal.ticker),
+                user=build_confirm_user(
+                    proposal, signal, relative_strength=relative_strength
+                ),
+                schema=confirm_schema(),
+            )
             return ConfirmationVerdict.model_validate(result)
-        except ValidationError:
-            # Never trade on an unparseable analyst response — treat as a rejection.
+        except (ValidationError, ValueError):
+            # Never trade on an unparseable/invalid analyst response — treat as rejection.
             return ConfirmationVerdict(
                 confirmed=False,
                 adjusted_conviction=0.0,
