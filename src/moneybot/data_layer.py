@@ -34,13 +34,19 @@ class DataLayer:
         # Point-in-time requests bypass the cache: backtest correctness beats reuse,
         # and a cached "live" frame may contain bars newer than as_of.
         if as_of is not None:
-            return self.prices.get_bars(ticker, timeframe, lookback, as_of=as_of)
+            df = self.prices.get_bars(ticker, timeframe, lookback, as_of=as_of)
+            if not df.empty and df["ts"].dt.date.max() > as_of:
+                raise ValueError(
+                    f"provider returned bars after as_of={as_of} (point-in-time violation)"
+                )
+            return df
 
         key = f"bars:{ticker}:{timeframe}:{lookback}"
         cached = self.cache.get_dataframe(key)
-        if cached is not None:
+        if cached is not None and not cached.empty:
             return cached
 
         df = self.prices.get_bars(ticker, timeframe, lookback)
-        self.cache.set_dataframe(key, df)
+        if not df.empty:
+            self.cache.set_dataframe(key, df)
         return df

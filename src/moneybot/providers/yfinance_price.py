@@ -34,9 +34,11 @@ class YFinancePriceProvider:
         if isinstance(raw.columns, pd.MultiIndex):
             raw.columns = raw.columns.get_level_values(0)
 
-        df = raw.reset_index().rename(
+        reset = raw.reset_index()
+        first_col = reset.columns[0]  # the datetime index becomes the first column
+        df = reset.rename(
             columns={
-                raw.index.name or "Date": "ts",
+                first_col: "ts",
                 "Datetime": "ts",
                 "Date": "ts",
                 "Open": "open",
