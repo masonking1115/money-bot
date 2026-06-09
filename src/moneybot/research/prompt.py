@@ -106,14 +106,13 @@ def build_deep_read_system(
     research_guidance: str, memory: MemoryContext, ticker: str
 ) -> str:
     """System prompt: strategy guidance + operator memory + grounding rule."""
-    return "\n".join(
-        [
-            research_guidance,
-            _format_memory(memory),
-            "",
-            _GROUNDING_RULE.format(ticker=ticker),
-        ]
-    )
+    parts = [research_guidance]
+    mem_block = _format_memory(memory)
+    if mem_block:
+        parts.append(mem_block)
+    parts.append("")  # blank line before the grounding rule
+    parts.append(_GROUNDING_RULE.format(ticker=ticker))
+    return "\n".join(parts)
 
 
 def build_deep_read_user(

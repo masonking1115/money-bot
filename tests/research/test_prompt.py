@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from moneybot.memory.models import Dossier, Lesson, MemoryContext
 from moneybot.models import Filing, NewsItem
 from moneybot.research.prompt import (
-    SourceDoc,  # noqa: F401  (imported to assert it is a public export)
+    SourceDoc,
     build_deep_read_system,
     build_deep_read_user,
     build_triage_user,
@@ -30,6 +30,7 @@ def _news():
 
 def test_collect_sources_indexes_filings_and_news():
     sources = collect_sources([_filing()], [_news()])
+    assert isinstance(sources[0], SourceDoc)
     assert [s.url for s in sources] == ["https://sec/1", "https://news/1"]
     assert sources[0].index == 0 and sources[1].index == 1
     assert sources[0].kind == "filing" and sources[1].kind == "news"
@@ -79,6 +80,11 @@ def test_deep_read_user_includes_indexed_sources_with_bodies_and_urls():
     assert "https://sec/1" in text and "https://news/1" in text
     assert "Raised FY guidance materially." in text  # deep read DOES include bodies
     assert "[0]" in text and "[1]" in text
+
+
+def test_deep_read_system_with_empty_memory_has_no_double_blank():
+    sys = build_deep_read_system("GUIDANCE", MemoryContext(), "NVDA")
+    assert "\n\n\n" not in sys  # empty memory must not inject a double blank line
 
 
 def test_deep_read_user_truncates_long_bodies():
