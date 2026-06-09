@@ -16,4 +16,6 @@ uv run pytest -q
 
 ## Status
 
-Phase 1 (this plan): foundation + point-in-time price data layer.
+- Phase 1: foundation + point-in-time price data layer.
+- Phase 2: filings (SEC EDGAR), news (RSS), and fundamentals (yfinance) providers,
+  integrated into the DataLayer with caching and point-in-time access.

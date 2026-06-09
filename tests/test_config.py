@@ -5,6 +5,7 @@ import pytest
 from moneybot.config import Settings, Universe, load_universe
 
 
+
 def test_settings_defaults_to_paper_mode(monkeypatch):
     monkeypatch.delenv("MONEYBOT_MODE", raising=False)
     settings = Settings()
@@ -46,3 +47,18 @@ def test_universe_get_unknown_symbol_raises(tmp_path):
     uni = load_universe(path)
     with pytest.raises(KeyError):
         uni.get("TSLA")
+
+
+def test_ticker_meta_accepts_cik(tmp_path):
+    path = tmp_path / "u.yaml"
+    path.write_text(
+        "sector: s\nbenchmark: B\ntickers:\n  - symbol: NVDA\n    cik: \"0001045810\"\n"
+    )
+    uni = load_universe(path)
+    assert uni.get("NVDA").cik == "0001045810"
+
+
+def test_settings_has_sec_user_agent_default(monkeypatch):
+    monkeypatch.delenv("MONEYBOT_SEC_USER_AGENT", raising=False)
+    settings = Settings()
+    assert "moneybot" in settings.sec_user_agent.lower()

@@ -6,6 +6,7 @@ import pytest
 from moneybot.cache import Cache
 from moneybot.config import Universe
 from moneybot.data_layer import DataLayer
+from moneybot.models import Filing, Fundamentals, NewsItem
 
 
 class StubPriceProvider:
@@ -105,3 +106,144 @@ def test_benchmark_ticker_is_allowed(tmp_path):
     dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path))
     df = dl.get_bars("SMH", "1d", 5)  # SMH is the universe benchmark
     assert df["close"].tolist() == [10.0, 11.0, 12.0]
+
+
+class StubFilings:
+    def __init__(self):
+        self.calls = 0
+
+    def get_recent_filings(self, ticker, types=None, since=None, as_of=None):
+        self.calls += 1
+        f = Filing(ticker=ticker, form_type="8-K", filed_at=date(2026, 6, 9),
+                   accession_no="a-1", url="https://x/1")
+        return [f]
+
+
+class StubNews:
+    def __init__(self):
+        self.calls = 0
+
+    def get_news(self, query, since=None, as_of=None):
+        self.calls += 1
+        from datetime import datetime, timezone
+        return [NewsItem(title="t", url="https://n/1",
+                         published_at=datetime(2026, 6, 9, tzinfo=timezone.utc),
+                         source="stub")]
+
+
+class StubFundamentals:
+    def __init__(self):
+        self.calls = 0
+
+    def get_fundamentals(self, ticker, as_of=None):
+        self.calls += 1
+        return Fundamentals(ticker=ticker, as_of=as_of or date(2026, 6, 9),
+                            market_cap=1.0)
+
+
+def test_get_filings_returns_and_caches(tmp_path):
+    filings = StubFilings()
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path),
+                   filings_provider=filings)
+    out = dl.get_filings("NVDA")
+    assert [f.form_type for f in out] == ["8-K"]
+    assert isinstance(out[0], Filing)
+    dl.get_filings("NVDA")  # second call served from cache
+    assert filings.calls == 1
+
+
+def test_get_filings_requires_provider(tmp_path):
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path))
+    with pytest.raises(ValueError, match="no filings provider"):
+        dl.get_filings("NVDA")
+
+
+def test_get_filings_outside_universe_rejected(tmp_path):
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path),
+                   filings_provider=StubFilings())
+    with pytest.raises(ValueError, match="not in universe"):
+        dl.get_filings("TSLA")
+
+
+def test_get_filings_as_of_bypasses_cache(tmp_path):
+    filings = StubFilings()
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path),
+                   filings_provider=filings)
+    dl.get_filings("NVDA", as_of=date(2026, 6, 9))
+    dl.get_filings("NVDA", as_of=date(2026, 6, 9))
+    assert filings.calls == 2
+
+
+def test_get_news_returns_and_caches(tmp_path):
+    news = StubNews()
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path),
+                   news_provider=news)
+    out = dl.get_news("NVDA")
+    assert isinstance(out[0], NewsItem)
+    dl.get_news("NVDA")
+    assert news.calls == 1
+
+
+def test_get_fundamentals_returns_and_caches(tmp_path):
+    fund = StubFundamentals()
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path),
+                   fundamentals_provider=fund)
+    out = dl.get_fundamentals("NVDA")
+    assert out.market_cap == 1.0
+    dl.get_fundamentals("NVDA")
+    assert fund.calls == 1
+
+
+def test_get_news_requires_provider(tmp_path):
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path))
+    with pytest.raises(ValueError, match="no news provider"):
+        dl.get_news("NVDA")
+
+
+def test_get_fundamentals_requires_provider(tmp_path):
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path))
+    with pytest.raises(ValueError, match="no fundamentals provider"):
+        dl.get_fundamentals("NVDA")
+
+
+def test_get_news_rejects_future_items_from_noncompliant_provider(tmp_path):
+    from datetime import datetime, timezone
+
+    class LeakyNews:
+        def get_news(self, query, since=None, as_of=None):
+            return [NewsItem(title="future", url="https://n/9",
+                             published_at=datetime(2026, 6, 11, tzinfo=timezone.utc),
+                             source="leak")]  # ignores as_of on purpose
+
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path), news_provider=LeakyNews())
+    with pytest.raises(ValueError, match="after as_of"):
+        dl.get_news("NVDA", as_of=date(2026, 6, 10))
+
+
+def test_get_news_outside_universe_rejected(tmp_path):
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path), news_provider=StubNews())
+    with pytest.raises(ValueError, match="not in universe"):
+        dl.get_news("TSLA")
+
+
+def test_get_fundamentals_outside_universe_rejected(tmp_path):
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path),
+                   fundamentals_provider=StubFundamentals())
+    with pytest.raises(ValueError, match="not in universe"):
+        dl.get_fundamentals("TSLA")
+
+
+def test_get_news_as_of_bypasses_cache(tmp_path):
+    news = StubNews()
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path), news_provider=news)
+    dl.get_news("NVDA", as_of=date(2026, 6, 9))
+    dl.get_news("NVDA", as_of=date(2026, 6, 9))
+    assert news.calls == 2
+
+
+def test_get_fundamentals_as_of_bypasses_cache(tmp_path):
+    fund = StubFundamentals()
+    dl = DataLayer(_universe(), StubPriceProvider(), Cache(tmp_path), fundamentals_provider=fund)
+    dl.get_fundamentals("NVDA", as_of=date(2026, 6, 9))
+    dl.get_fundamentals("NVDA", as_of=date(2026, 6, 9))
+    assert fund.calls == 2

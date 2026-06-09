@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     alpaca_key_id: str = ""
     alpaca_secret_key: str = ""
 
+    sec_user_agent: str = "moneybot mason@voltai.com"
+
     # Model tiering
     model_triage: str = "claude-haiku-4-5"
     model_deep_read: str = "claude-sonnet-4-6"
@@ -34,6 +36,7 @@ class TickerMeta(BaseModel):
     symbol: str
     market_cap_tier: str | None = None
     earnings_date: date | None = None
+    cik: str | None = None
 
 
 class Universe(BaseModel):
