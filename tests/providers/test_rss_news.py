@@ -53,7 +53,11 @@ def test_since_excludes_old_items():
 def test_query_is_url_encoded_into_template():
     captured = {}
 
+    def fake_fetch(url):
+        captured["url"] = url
+        return SAMPLE_RSS
+
     prov = RssNewsProvider(feed_url_template="https://x/?q={query}")
-    prov._fetch = lambda url: captured.setdefault("url", url) or SAMPLE_RSS
+    prov._fetch = fake_fetch
     prov.get_news("NV DA")
     assert captured["url"] == "https://x/?q=NV+DA"
