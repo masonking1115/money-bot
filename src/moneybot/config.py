@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # Active strategy (resolved via moneybot.strategies.registry)
     strategy: str = "catalyst_driven"
 
+    # Analyst
+    analyst_shortlist: int = 5    # max top-ranked names to independently confirm per cycle
+    rs_lookback_days: int = 20    # bar lookback for relative-strength vs the benchmark
+    rs_timeframe: str = "1d"      # bar timeframe for relative-strength (yfinance interval)
+
 
 class TickerMeta(BaseModel):
     symbol: str
