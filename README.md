@@ -23,3 +23,8 @@ uv run pytest -q
   lessons, and a keyed MemoryRetriever.
 - Phase 4: pluggable strategy framework — Strategy interface, registry, and the
   CatalystDrivenLong plugin (semiconductors, long-only, catalyst-driven entries).
+- Phase 5: research agents — generic tiered LLM agents (Haiku triage → Sonnet
+  deep-read) that read the active strategy's signal schema + research guidance, pull
+  filings/news (point-in-time aware) plus operator memory, and emit citation-grounded
+  CatalystSignals. All Anthropic calls sit behind an LLMClient seam, so no test touches
+  the network.
