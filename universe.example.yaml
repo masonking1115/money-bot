@@ -1,0 +1,12 @@
+# Example sector universe. Copy to universe.yaml and edit.
+# Lean toward a sector where you have a real informational edge.
+sector: semiconductors
+benchmark: SMH
+tickers:
+  - symbol: NVDA
+    market_cap_tier: mega
+    earnings_date: 2026-08-27   # manual override; verify each quarter
+  - symbol: AMD
+    market_cap_tier: large
+  - symbol: AVGO
+    market_cap_tier: mega
