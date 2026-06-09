@@ -24,7 +24,7 @@ class CatalystSignal(BaseModel):
     """A structured catalyst the Research agents emit for a ticker."""
 
     ticker: str
-    category: str
+    category: Literal["guidance", "demand", "supply", "policy"]
     direction: Literal["bullish", "bearish", "neutral"]
     materiality: float = Field(ge=0.0, le=1.0)
     freshness_days: int = Field(ge=0)

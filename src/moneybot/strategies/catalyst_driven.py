@@ -89,14 +89,17 @@ class CatalystDrivenLong:
         signals: Sequence[CatalystSignal],
         relative_strength: dict[str, float] | None = None,
     ) -> list[Proposal]:
-        rs = relative_strength or {}
+        rs = relative_strength if relative_strength is not None else {}
         scored: list[tuple[float, float, CatalystSignal]] = []
         for s in signals:
             if s.direction != "bullish":
                 continue
             if s.freshness_days > self._params.freshness_window_days:
                 continue
-            scored.append((self._score(s), rs.get(s.ticker, 0.0), s))
+            score = self._score(s)
+            if score <= 0.0:
+                continue
+            scored.append((score, rs.get(s.ticker, 0.0), s))
 
         scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
         return [
@@ -105,10 +108,10 @@ class CatalystDrivenLong:
                 action="buy",
                 conviction=s.conviction,
                 thesis=s.thesis,
-                score=score,
+                score=sc,
                 signal_ref=s.signal_id,
             )
-            for score, _rs, s in scored
+            for sc, _rs, s in scored
         ]
 
     def exit_plan(self) -> ExitPlan:

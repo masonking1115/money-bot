@@ -84,3 +84,10 @@ def test_exit_plan_reflects_parameters():
     assert plan.stop_loss_pct == 0.08
     assert plan.profit_target_pct == 0.20
     assert plan.thesis_check_guidance  # non-empty
+
+
+def test_rank_drops_zero_score_at_freshness_boundary():
+    strat = CatalystDrivenLong()  # freshness_window_days = 5
+    # freshness_days == window -> decay 0 -> score 0 -> must be dropped
+    out = strat.rank([_sig("EDGE", 0.9, 0.9, 5)])
+    assert out == []

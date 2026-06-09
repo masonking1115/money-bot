@@ -46,6 +46,11 @@ def test_strategy_params_defaults_match_spec():
     assert p.hedge_enabled is False
 
 
+def test_catalyst_signal_rejects_unknown_category():
+    with pytest.raises(ValidationError):
+        _signal(category="rumor")
+
+
 def test_exit_plan_fields():
     e = ExitPlan(max_hold_days=10, stop_loss_pct=0.08, profit_target_pct=0.20,
                  thesis_check_guidance="check guidance held")
