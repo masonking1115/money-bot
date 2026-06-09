@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 
 class Dossier(BaseModel):
@@ -14,14 +13,14 @@ class Dossier(BaseModel):
     key: str
     content: str
     version: int
-    updated_at: datetime
+    updated_at: AwareDatetime
 
 
 class JournalEntry(BaseModel):
     """An append-only episodic record (a proposal, fill, outcome, etc.)."""
 
     entry_id: str
-    ts: datetime
+    ts: AwareDatetime
     kind: str
     ticker: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -31,7 +30,7 @@ class Lesson(BaseModel):
     """A distilled lesson learned from outcomes, applied to a sector or ticker."""
 
     lesson_id: str
-    created_at: datetime
+    created_at: AwareDatetime
     applies_to: str
     pattern: str
     lesson: str

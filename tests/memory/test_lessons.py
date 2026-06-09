@@ -37,3 +37,12 @@ def test_get_for_excludes_superseded(tmp_path):
 def test_persists_across_instances(tmp_path):
     _store(tmp_path).add("sector:semis", "p", "l", 0.5)
     assert len(LessonStore(tmp_path).get_for("sector:semis")) == 1
+
+
+def test_get_for_ignores_cross_key_supersede(tmp_path):
+    store = _store(tmp_path)
+    nvda = store.add("ticker:NVDA", "p", "nvda lesson", 0.5)  # lesson_id "1"
+    # An AMD lesson that supersedes id "1" must NOT suppress the NVDA lesson.
+    store.add("ticker:AMD", "q", "amd lesson", 0.5, supersedes=nvda.lesson_id)
+    out = store.get_for("ticker:NVDA")
+    assert [lsn.pattern for lsn in out] == ["p"]

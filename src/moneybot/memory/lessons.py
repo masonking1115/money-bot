@@ -54,10 +54,6 @@ class LessonStore:
         return record
 
     def get_for(self, applies_to: str) -> list[Lesson]:
-        all_lessons = self._all()
-        superseded = {lsn.supersedes for lsn in all_lessons if lsn.supersedes}
-        return [
-            lsn
-            for lsn in all_lessons
-            if lsn.applies_to == applies_to and lsn.lesson_id not in superseded
-        ]
+        key_lessons = [lsn for lsn in self._all() if lsn.applies_to == applies_to]
+        superseded = {lsn.supersedes for lsn in key_lessons if lsn.supersedes}
+        return [lsn for lsn in key_lessons if lsn.lesson_id not in superseded]
