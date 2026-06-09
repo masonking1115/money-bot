@@ -21,3 +21,5 @@ uv run pytest -q
   integrated into the DataLayer with caching and point-in-time access.
 - Phase 3: autodidactic memory — semantic dossiers, episodic journal, distilled
   lessons, and a keyed MemoryRetriever.
+- Phase 4: pluggable strategy framework — Strategy interface, registry, and the
+  CatalystDrivenLong plugin (semiconductors, long-only, catalyst-driven entries).
