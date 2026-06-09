@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
-from moneybot.analyst.models import ConfirmationVerdict
+from moneybot.analyst.models import ConfirmationVerdict, TradePlan
 from moneybot.analyst.prompt import build_confirm_system, build_confirm_user, confirm_schema
 from moneybot.analyst.relative_strength import excess_return
 from moneybot.memory.models import MemoryContext
@@ -90,3 +90,43 @@ class AnalystAgent:
                 adjusted_conviction=0.0,
                 reasoning="unparseable analyst response",
             )
+
+    def analyze(
+        self,
+        research: dict[str, list[CatalystSignal]],
+        as_of: date | None = None,
+    ) -> list[TradePlan]:
+        """Rank research signals, independently confirm the shortlist, emit trade plans."""
+        signals = [s for sigs in research.values() for s in sigs]
+        if not signals:
+            return []
+
+        by_id = {s.signal_id: s for s in signals}
+        rs = self._relative_strength(as_of=as_of)
+        ranked = self.strategy.rank(signals, rs)
+        shortlist = ranked[: self.settings.analyst_shortlist]
+        exit_plan = self.strategy.exit_plan()
+
+        plans: list[TradePlan] = []
+        for proposal in shortlist:
+            signal = by_id.get(proposal.signal_ref)
+            memory = self._memory_context(proposal.ticker)
+            verdict = self._confirm(
+                proposal, signal, memory, relative_strength=rs.get(proposal.ticker, 0.0)
+            )
+            if not verdict.confirmed:
+                continue
+            plans.append(
+                TradePlan(
+                    ticker=proposal.ticker,
+                    action=proposal.action,
+                    conviction=verdict.adjusted_conviction,
+                    thesis=proposal.thesis,
+                    score=proposal.score,
+                    signal_ref=proposal.signal_ref,
+                    exit_plan=exit_plan,
+                    analyst_note=verdict.reasoning,
+                    risk_flags=verdict.risk_flags,
+                )
+            )
+        return plans
