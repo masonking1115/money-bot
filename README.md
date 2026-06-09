@@ -28,3 +28,10 @@ uv run pytest -q
   filings/news (point-in-time aware) plus operator memory, and emit citation-grounded
   CatalystSignals. All Anthropic calls sit behind an LLMClient seam, so no test touches
   the network.
+- **Phase 6 — Analyst agent:** a generic, strategy-agnostic agent (`moneybot.analyst`) that turns
+  raw research signals into ranked, independently-confirmed `TradePlan`s. It computes each name's
+  relative strength vs the benchmark, delegates the freshness gate + ranking to the active
+  strategy's `rank`, then makes one Opus call per shortlisted name to *independently confirm or
+  reject* the thesis (a malformed response is a safe rejection — never an unverified trade).
+  Confirmed proposals carry the strategy's exit plan and the analyst's adjusted conviction. The
+  Analyst proposes; it never sizes or places trades (that is the Risk Engine, Phase 7).
