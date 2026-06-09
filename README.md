@@ -19,3 +19,5 @@ uv run pytest -q
 - Phase 1: foundation + point-in-time price data layer.
 - Phase 2: filings (SEC EDGAR), news (RSS), and fundamentals (yfinance) providers,
   integrated into the DataLayer with caching and point-in-time access.
+- Phase 3: autodidactic memory — semantic dossiers, episodic journal, distilled
+  lessons, and a keyed MemoryRetriever.
