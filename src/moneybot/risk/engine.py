@@ -14,7 +14,9 @@ from datetime import date
 from typing import TYPE_CHECKING
 
 from moneybot.risk.kill_switch import kill_switch_active
+from moneybot.risk.metrics import average_dollar_volume, realized_volatility
 from moneybot.risk.models import RiskAssessment, RiskDecision
+from moneybot.risk.sizing import target_weight
 
 if TYPE_CHECKING:
     from moneybot.analyst.models import TradePlan
@@ -71,5 +73,112 @@ class RiskEngine:
                 halted=True,
             )
 
-        # Per-plan pipeline and hedge are added in Tasks 7-8.
-        return RiskAssessment(decisions=[], halted=False)
+        params = self.strategy.parameters()
+        held = {pos.ticker for pos in portfolio.positions}
+        running_gross = portfolio.gross_exposure_pct
+
+        decisions: list[RiskDecision] = []
+        for plan in plans:
+            decision = self._assess_plan(
+                plan, portfolio, params, held, running_gross, as_of
+            )
+            decisions.append(decision)
+            if decision.approved:
+                running_gross += decision.target_weight
+                held.add(plan.ticker)
+
+        return RiskAssessment(decisions=decisions, halted=False)
+
+    def _in_earnings_blackout(self, ticker: str, as_of: date | None) -> bool:
+        """True when a known earnings date is today..N days ahead of as_of.
+
+        Without an as_of we cannot measure proximity, and we never fabricate a
+        clock — so the blackout simply cannot fire in that case.
+        """
+        if as_of is None:
+            return False
+        try:
+            meta = self.data.universe.get(ticker)
+        except KeyError:
+            return False
+        earnings = meta.earnings_date
+        if earnings is None:
+            return False
+        days = (earnings - as_of).days
+        return 0 <= days <= self.settings.earnings_blackout_days
+
+    def _assess_plan(
+        self,
+        plan: TradePlan,
+        portfolio: PortfolioState,
+        params,  # StrategyParams
+        held: set[str],
+        running_gross: float,
+        as_of: date | None,
+    ) -> RiskDecision:
+        if plan.ticker in held:
+            return self._veto(plan, "already_held", "position already open; no pyramiding")
+
+        if self._in_earnings_blackout(plan.ticker, as_of):
+            return self._veto(
+                plan, "earnings_blackout", "within the earnings blackout window"
+            )
+
+        bars = self.data.get_bars(
+            plan.ticker,
+            self.settings.risk_timeframe,
+            self.settings.risk_lookback_days,
+            as_of=as_of,
+        )
+        closes = [] if bars.empty else bars["close"].tolist()
+        volumes = [] if bars.empty else bars["volume"].tolist()
+        price = closes[-1] if closes else None
+        if price is None or price <= 0:
+            return self._veto(plan, "sanity", "no valid reference price")
+
+        adv = average_dollar_volume(closes, volumes)
+        if adv is None or adv < self.settings.min_dollar_volume:
+            return self._veto(plan, "liquidity", "below the minimum $-volume floor")
+
+        weight = target_weight(
+            conviction=plan.conviction,
+            volatility=realized_volatility(closes),
+            max_position_pct=params.max_position_pct,
+            target_volatility=self.settings.target_volatility,
+        )
+        if weight <= 0:
+            return self._veto(plan, "sizing", "computed a zero position size")
+
+        rules: list[str] = []
+        target_dollars = weight * portfolio.equity
+
+        sector_headroom = round(
+            (params.max_sector_exposure_pct - running_gross) * portfolio.equity, 2
+        )
+        if sector_headroom <= 0:
+            return self._veto(plan, "sector_exposure_cap", "no sector exposure headroom")
+        if sector_headroom < target_dollars:
+            target_dollars = sector_headroom
+            rules.append("sector_exposure_cap")
+
+        if portfolio.cash < target_dollars:
+            target_dollars = portfolio.cash
+            rules.append("insufficient_cash")
+
+        shares = int(target_dollars // price)
+        if shares <= 0:
+            return self._veto(
+                plan, rules[-1] if rules else "sanity", "rounds to zero shares"
+            )
+
+        actual_dollars = shares * price
+        return RiskDecision(
+            ticker=plan.ticker,
+            approved=True,
+            target_weight=actual_dollars / portfolio.equity,
+            target_dollars=actual_dollars,
+            shares=shares,
+            reference_price=price,
+            rules_fired=rules,
+            reasoning="approved within limits",
+        )
