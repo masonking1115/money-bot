@@ -17,7 +17,9 @@ class Position(BaseModel):
     """One open position in the account snapshot."""
 
     ticker: str
-    shares: float
+    shares: float  # observed broker quantity; may be fractional, unlike an emitted order
+    # Sign convention: long positions are positive. A short would be negative, so
+    # `long_market_value` below can sum positives to get gross long exposure.
     market_value: float  # current market value (shares * current price)
 
 
@@ -45,7 +47,7 @@ class RiskDecision(BaseModel):
     approved: bool
     target_weight: float = 0.0  # approved fraction of equity (0 if vetoed)
     target_dollars: float = 0.0  # shares * reference_price actually deployed
-    shares: int = 0
+    shares: int = 0  # whole-share order the engine emits (floored from target_dollars/price)
     reference_price: float | None = None
     rules_fired: list[str] = Field(default_factory=list)  # rules that downsized or vetoed
     reasoning: str
