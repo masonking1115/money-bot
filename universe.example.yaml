@@ -6,6 +6,7 @@ tickers:
   - symbol: NVDA
     market_cap_tier: mega
     earnings_date: 2026-08-27   # manual override; verify each quarter
+    cik: "0001045810"           # SEC CIK (zero-padded); needed for EDGAR filings
   - symbol: AMD
     market_cap_tier: large
   - symbol: AVGO
