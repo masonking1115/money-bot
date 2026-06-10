@@ -73,7 +73,7 @@ class Orchestrator:
         as_of_date = as_of if as_of is not None else now.date()
 
         # 1. Mechanical exits on existing positions (before taking on new ones).
-        exit_fills = self._run_exits(cycle_id=cycle_id, as_of_date=as_of_date)
+        exit_fills = self._run_exits(cycle_id=cycle_id, as_of=as_of, as_of_date=as_of_date)
 
         # 2. Research -> Analyst.
         research = self.research.research_universe(as_of=as_of)
@@ -83,13 +83,24 @@ class Orchestrator:
         # 3. Portfolio snapshot (marked to market) with today's P&L for the breaker.
         account = self.execution.broker.get_account()
         day_pnl = self.sod_equity.day_pnl_pct(account.equity, as_of_date)
-        portfolio = build_portfolio_state(
-            broker=self.execution.broker,
-            data_layer=self.data,
-            settings=self.settings,
-            as_of=as_of,
-            day_pnl_pct=day_pnl,
-        )
+        try:
+            portfolio = build_portfolio_state(
+                broker=self.execution.broker,
+                data_layer=self.data,
+                settings=self.settings,
+                as_of=as_of,
+                day_pnl_pct=day_pnl,
+            )
+        except ValueError as exc:
+            # A non-positive-equity account cannot be sized against. Exits already
+            # ran (capital-preserving); record why we stop and skip new entries.
+            self.journal.append("halt", None, {"reason": "portfolio_unbuildable", "detail": str(exc)})
+            return CycleResult(
+                status="halted",
+                reason="portfolio_unbuildable",
+                cycle_id=cycle_id,
+                exit_fills=exit_fills,
+            )
 
         # 4. Risk Engine -> entry execution.
         assessment = self.risk.assess(plans, portfolio, as_of=as_of)
@@ -153,13 +164,14 @@ class Orchestrator:
                 dates[ticker] = max(e.ts for e in buys).date()
         return dates
 
-    def _run_exits(self, *, cycle_id: str, as_of_date: date) -> list:
+    def _run_exits(self, *, cycle_id: str, as_of: date | None, as_of_date: date) -> list:
         longs = [p for p in self.execution.broker.get_positions() if p.qty > 0]
         if not longs:
             return []
         current_prices: dict[str, float] = {}
         for p in longs:
-            price = self._mark(p.ticker, None)
+            # Thread the cycle's as_of so a backtest marks point-in-time, not live.
+            price = self._mark(p.ticker, as_of)
             if price is not None:
                 current_prices[p.ticker] = price
         entry_dates = self._entry_dates([p.ticker for p in longs])

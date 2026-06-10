@@ -108,7 +108,9 @@ def test_run_exits_places_stop_loss_sell():
     journal = FakeJournal([_buy_entry("NVDA", datetime(2026, 6, 18, tzinfo=timezone.utc))])
     orch = _orch(data, execution, journal, FakeStrategy())
 
-    fills = orch._run_exits(cycle_id="2026-06-20T10", as_of_date=_dt.date(2026, 6, 20))
+    fills = orch._run_exits(
+        cycle_id="2026-06-20T10", as_of=None, as_of_date=_dt.date(2026, 6, 20)
+    )
 
     assert len(fills) == 1
     order = execution.placed[0]
@@ -126,7 +128,7 @@ def test_run_exits_noop_when_in_band():
     journal = FakeJournal([_buy_entry("NVDA", datetime(2026, 6, 18, tzinfo=timezone.utc))])
     orch = _orch(data, execution, journal, FakeStrategy())
 
-    fills = orch._run_exits(cycle_id="c", as_of_date=_dt.date(2026, 6, 20))
+    fills = orch._run_exits(cycle_id="c", as_of=None, as_of_date=_dt.date(2026, 6, 20))
     assert fills == [] and execution.placed == []
 
 
@@ -134,4 +136,28 @@ def test_run_exits_empty_when_no_positions():
     import datetime as _dt
     execution = FakeExecution(FakeBroker([]))
     orch = _orch(FakeData(), execution, FakeJournal(), FakeStrategy())
-    assert orch._run_exits(cycle_id="c", as_of_date=_dt.date(2026, 6, 20)) == []
+    assert orch._run_exits(cycle_id="c", as_of=None, as_of_date=_dt.date(2026, 6, 20)) == []
+
+
+def test_run_exits_threads_as_of_into_price_marking():
+    # In backtest mode the exit loop must mark point-in-time, not live.
+    import datetime as _dt
+
+    class RecordingData(FakeData):
+        def __init__(self):
+            super().__init__()
+            self.seen_as_of = []
+
+        def get_bars(self, ticker, timeframe, lookback, as_of=None):
+            self.seen_as_of.append(as_of)
+            return super().get_bars(ticker, timeframe, lookback, as_of=as_of)
+
+    data = RecordingData()
+    broker = FakeBroker([PositionRecord(ticker="NVDA", qty=10.0, avg_price=100.0)])
+    execution = FakeExecution(broker)
+    journal = FakeJournal([_buy_entry("NVDA", datetime(2026, 6, 1, tzinfo=timezone.utc))])
+    orch = _orch(data, execution, journal, FakeStrategy())
+
+    backtest_day = _dt.date(2026, 6, 20)
+    orch._run_exits(cycle_id="c", as_of=backtest_day, as_of_date=backtest_day)
+    assert backtest_day in data.seen_as_of  # marked at the point-in-time date, not None

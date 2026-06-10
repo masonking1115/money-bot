@@ -175,3 +175,29 @@ def test_halted_assessment_sets_flag():
     result = orch.run_cycle()
     assert result.status == "completed" and result.halted_by_risk is True
     assert result.entry_fills == []
+
+
+def test_unbuildable_portfolio_halts_without_entries():
+    # A non-positive-equity account: build_portfolio_state raises; the cycle must
+    # halt (journaled), not crash, and place no entries.
+    class BrokeBroker:
+        def get_positions(self):
+            return []
+
+        def get_account(self):
+            return AccountSnapshot(equity=0.0, cash=0.0)  # fallback also 0 -> raises
+
+    execution = FakeExecution(BrokeBroker())
+    journal = FakeJournal()
+    orch = Orchestrator(
+        settings=_Settings(), data_layer=FakeData(), research=FakeResearch(),
+        analyst=FakeAnalyst(), risk=FakeRisk(), execution=execution, journal=journal,
+        sod_equity=FakeSod(), strategy=FakeStrategy(),
+        clock=lambda: datetime(2026, 6, 10, 10, 0, tzinfo=ET),
+        market_open=lambda now: True,
+    )
+    result = orch.run_cycle()
+    assert result.status == "halted" and result.reason == "portfolio_unbuildable"
+    assert result.entry_fills == []
+    assert execution.executed is None  # entry execution never ran
+    assert any(k == "halt" for k, t, p in journal.appended)
