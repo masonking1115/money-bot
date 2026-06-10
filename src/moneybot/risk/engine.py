@@ -116,6 +116,9 @@ class RiskEngine:
         running_gross: float,
         as_of: date | None,
     ) -> RiskDecision:
+        if plan.ticker not in self.data.universe.symbols:
+            return self._veto(plan, "sanity", "not a tradeable name")
+
         if plan.ticker in held:
             return self._veto(plan, "already_held", "position already open; no pyramiding")
 
@@ -167,8 +170,11 @@ class RiskEngine:
 
         shares = int(target_dollars // price)
         if shares <= 0:
-            return self._veto(
-                plan, rules[-1] if rules else "sanity", "rounds to zero shares"
+            return RiskDecision(
+                ticker=plan.ticker,
+                approved=False,
+                rules_fired=rules or ["sanity"],
+                reasoning="rounds to zero shares",
             )
 
         actual_dollars = shares * price

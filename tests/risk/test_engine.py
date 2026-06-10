@@ -223,3 +223,29 @@ def test_running_exposure_consumed_across_plans(monkeypatch):
     nvda, amd = out.decisions
     assert nvda.approved is True and nvda.target_dollars == 5_000.0
     assert amd.approved is False and "sector_exposure_cap" in amd.rules_fired
+
+
+def test_out_of_universe_plan_is_vetoed_not_crashing(monkeypatch):
+    monkeypatch.delenv("MONEYBOT_KILL_SWITCH", raising=False)
+    # TSLA is not in the universe (NVDA, AMD). The real DataLayer.get_bars would
+    # raise ValueError for it; the engine must veto, never crash, and never price it.
+    eng = _engine({"NVDA": _bars([100.0, 100.0, 100.0])})
+    out = eng.assess([_plan("TSLA")], _healthy_portfolio(), as_of=date(2026, 6, 1))
+    assert out.decisions[0].approved is False
+    assert "sanity" in out.decisions[0].rules_fired
+    assert all(c["ticker"] != "TSLA" for c in eng.data.calls)
+
+
+def test_volatility_scaling_reduces_size_end_to_end(monkeypatch):
+    monkeypatch.delenv("MONEYBOT_KILL_SWITCH", raising=False)
+    # closes 100,110,99 -> realized_volatility = sqrt(0.02) ~ 0.1414, far above the
+    # 0.02 target, so a full-conviction name is scaled DOWN from the 0.10 cap.
+    eng = _engine({"NVDA": _bars([100.0, 110.0, 99.0])})
+    out = eng.assess([_plan("NVDA", conviction=1.0)], _healthy_portfolio(),
+                     as_of=date(2026, 6, 1))
+    d = out.decisions[0]
+    assert d.approved is True
+    assert d.reference_price == 99.0
+    assert d.target_weight < 0.10          # vol-scaling trimmed it below the cap
+    assert d.shares == 14                   # 0.10 * sqrt(0.02) * 100_000 = $1414.2 -> //99 = 14
+    assert d.rules_fired == []              # vol-scaling is intrinsic to sizing, not a cap rule
