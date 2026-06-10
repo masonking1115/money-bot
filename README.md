@@ -42,3 +42,10 @@ uv run pytest -q
   checks liquidity and price sanity, then sizes by conviction scaled down for volatility,
   bounded by per-name, sector-exposure, and cash caps. Every decision records the rule that
   fired, and an optional SMH hedge offsets sector beta when enabled. No LLM, no network.
+- Phase 8: execution adapter — the layer (moneybot.execution) that actually places the Risk
+  Engine's approved orders. One interface, paper or live by a single config flag (`mode`): a
+  built-in paper-trading simulator for validation, and a thin Alpaca adapter for live (its SDK
+  calls isolated behind a seam, so no test touches the network). It records fills, keeps the
+  bot's own position ledger (idempotent, crash-safe), and reconciles that ledger against the
+  broker — report-only, never auto-trading to paper over a discrepancy. A future broker (e.g.
+  IBKR) is just one more implementation of the same Broker seam.
