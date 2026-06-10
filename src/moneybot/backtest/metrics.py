@@ -94,10 +94,10 @@ def compute_metrics(
 
     returns = _daily_returns(equities)
     n_periods = len(returns)
-    if n_periods > 0 and starting_cash > 0 and final_equity > 0:
+    if n_periods >= 20 and starting_cash > 0 and final_equity > 0:
         cagr = (final_equity / starting_cash) ** (_TRADING_DAYS / n_periods) - 1
     else:
-        cagr = 0.0
+        cagr = total_return
 
     n_trades = len(trades)
     wins = sum(1 for t in trades if t.pnl > 0)

@@ -53,7 +53,17 @@ def run_backtest(
     clock = SimClock()
 
     # Build (and cache-wrap) the AI layer; build_orchestrator uses these verbatim.
-    if config.use_agents:
+    if not config.use_agents:
+        research = _NoResearch()
+        analyst = _NoAnalyst()
+    elif config.mode == "replay":
+        # Replay must be truly offline: never construct an Anthropic client.
+        # _NeverCalled raises if the cache misses, making a cache miss obvious.
+        _sentinel = _NeverCalled()
+        research = CachingResearch(_sentinel, root=cache_root, mode="replay")
+        analyst = CachingAnalyst(_sentinel, root=cache_root, mode="replay")
+    else:
+        # record mode: build the real agents so live LLM calls can be cached.
         research = CachingResearch(
             build_research_agent(
                 settings=settings, data_layer=data_layer, retriever=retriever, llm=llm
@@ -68,9 +78,6 @@ def run_backtest(
             root=cache_root,
             mode=config.mode,
         )
-    else:
-        research = _NoResearch()
-        analyst = _NoAnalyst()
 
     orch = build_orchestrator(
         settings=settings,
@@ -143,3 +150,19 @@ class _NoResearch:
 class _NoAnalyst:
     def analyze(self, research, as_of=None):
         return []
+
+
+class _NeverCalled:
+    """Sentinel inner for CachingResearch/CachingAnalyst in replay mode.
+
+    The caching wrappers serve every call from disk; if they somehow miss and
+    fall through to the inner, this raises rather than constructing a real
+    Anthropic client (which would fail without ANTHROPIC_API_KEY and break
+    offline replay).
+    """
+
+    def research_universe(self, as_of=None):
+        raise RuntimeError("inner agent called in replay mode (cache miss)")
+
+    def analyze(self, research, as_of=None):
+        raise RuntimeError("inner agent called in replay mode (cache miss)")

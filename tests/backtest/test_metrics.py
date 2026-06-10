@@ -96,3 +96,26 @@ def test_compute_metrics_end_to_end():
 def test_compute_metrics_empty_curve_is_safe():
     m = compute_metrics(equity_curve=[], trades=[], starting_cash=100_000.0, benchmark_closes=[])
     assert m.total_return == 0.0 and m.n_trades == 0 and m.final_equity == 100_000.0
+
+
+# I2 regression: CAGR guard for short series --------------------------------
+
+def test_compute_metrics_short_curve_cagr_equals_total_return():
+    """I2: a 2-point equity curve must not produce an absurd annualized CAGR.
+
+    With n_periods=1 (< 20), CAGR falls back to total_return instead of
+    applying the (252/1) annualization exponent which would blow up.
+    """
+    curve = [
+        EquityPoint(day=date(2024, 1, 2), equity=100_000.0, cash=0.0, n_positions=1),
+        EquityPoint(day=date(2024, 1, 3), equity=110_000.0, cash=0.0, n_positions=1),
+    ]
+    m = compute_metrics(
+        equity_curve=curve,
+        trades=[],
+        starting_cash=100_000.0,
+        benchmark_closes=[],
+    )
+    assert m.total_return == pytest.approx(0.10)
+    # CAGR must equal total_return (not an annualized blow-up).
+    assert m.cagr == pytest.approx(m.total_return)

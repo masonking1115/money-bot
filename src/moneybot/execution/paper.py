@@ -61,6 +61,7 @@ class PaperBroker:
             filled_qty=order.quantity,
             avg_price=price,
             ts=self._clock(),
+            reason=order.reason,
         )
 
         # buy/cover cost cash; sell/short add cash.

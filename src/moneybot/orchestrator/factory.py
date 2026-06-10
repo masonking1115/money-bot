@@ -54,7 +54,7 @@ def build_orchestrator(
             settings=settings, data_layer=data_layer, retriever=retriever, llm=llm
         )
     risk = build_risk_engine(settings=settings, data_layer=data_layer)
-    execution = build_execution_adapter(settings=settings)
+    execution = build_execution_adapter(settings=settings, clock=clock)
     journal = JournalStore(settings.data_dir, clock=clock)
     sod_equity = SodEquityStore(settings.data_dir)
     strategy = registry.get(settings.strategy)

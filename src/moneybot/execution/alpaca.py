@@ -159,7 +159,7 @@ class AlpacaBroker:
             filled_qty=int(float(raw["filled_qty"] or 0)),
             avg_price=float(raw["filled_avg_price"] or 0.0),
             ts=self._clock(),
-            reason="" if status not in _REJECTED else status,
+            reason=status if status in _REJECTED else order.reason,
         )
 
     def get_positions(self) -> list[PositionRecord]:

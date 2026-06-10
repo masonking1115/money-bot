@@ -1,5 +1,7 @@
 """Backtesting harness: replay historical data through the live orchestrator code path."""
 
+from __future__ import annotations
+
 from moneybot.backtest.engine import run_backtest
 from moneybot.backtest.models import (
     BacktestConfig,

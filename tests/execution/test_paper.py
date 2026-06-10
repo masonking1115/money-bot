@@ -80,3 +80,36 @@ def test_flat_positions_excluded():
     )
     b.place_order(sell)
     assert b.get_positions() == []
+
+
+# H2 regression: order reason propagates to filled Fill ----------------------
+
+def test_filled_fill_carries_order_reason():
+    """H2: OrderRequest.reason is echoed in the filled Fill.reason."""
+    b = _broker()
+    order = OrderRequest(
+        client_order_id="c:NVDA:exit",
+        ticker="NVDA",
+        side="sell",
+        quantity=5,
+        reference_price=90.0,
+        reason="stop_loss",
+    )
+    fill = b.place_order(order)
+    assert fill.status == "filled"
+    assert fill.reason == "stop_loss"
+
+
+def test_rejection_reason_not_overridden_by_order_reason():
+    """H2: rejection fills keep 'no reference price' reason, not order.reason."""
+    b = _broker()
+    order = OrderRequest(
+        client_order_id="c:NVDA:exit",
+        ticker="NVDA",
+        side="sell",
+        quantity=5,
+        reason="stop_loss",
+    )
+    fill = b.place_order(order)
+    assert fill.status == "rejected"
+    assert "reference price" in fill.reason  # rejection reason preserved

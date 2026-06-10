@@ -103,3 +103,31 @@ def test_run_backtest_no_trading_days_is_safe(tmp_path):
     )
     assert report.equity_curve == []
     assert report.metrics.final_equity == 100_000.0
+
+
+# M1 regression: replay mode must not construct an Anthropic client ----------
+
+def test_replay_mode_with_agents_does_not_require_llm(tmp_path):
+    """M1: use_agents=True + mode='replay' + llm=None must not raise.
+
+    With no trading days the cache is never consulted and _NeverCalled is never
+    reached, so the test confirms that no Anthropic client is built at call time
+    (build_research_agent/build_analyst_agent are NOT called in replay mode).
+    """
+    empty = pd.DataFrame({"ts": [], "close": []})
+    # llm=None would trigger AnthropicClient.__init__ -> reads ANTHROPIC_API_KEY
+    # -> raises if absent. With the fix, build_research_agent is never called.
+    report = run_backtest(
+        settings=_settings(tmp_path),
+        data_layer=_data_layer(tmp_path),
+        llm=None,  # type: ignore[arg-type]  -- intentionally None for the test
+        retriever=StubRetriever(),
+        config=BacktestConfig(
+            start=date(2024, 3, 4), end=date(2024, 3, 6),
+            use_agents=True, mode="replay",
+        ),
+        cache_root=tmp_path / "bt_cache",
+        benchmark_bars=empty,
+    )
+    assert report.equity_curve == []
+    assert report.metrics.final_equity == 100_000.0

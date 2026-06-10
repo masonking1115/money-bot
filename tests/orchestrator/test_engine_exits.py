@@ -161,3 +161,23 @@ def test_run_exits_threads_as_of_into_price_marking():
     backtest_day = _dt.date(2026, 6, 20)
     orch._run_exits(cycle_id="c", as_of=backtest_day, as_of_date=backtest_day)
     assert backtest_day in data.seen_as_of  # marked at the point-in-time date, not None
+
+
+# H2 regression: exit reason propagates into the OrderRequest ----------------
+
+def test_run_exits_order_carries_exit_reason():
+    """H2: the OrderRequest placed for a stop-loss exit must carry reason='stop_loss'."""
+    import datetime as _dt
+
+    data = FakeData()
+    data.price = 90.0  # NVDA bought at 100 -> -10% < -8% stop
+    broker = FakeBroker([PositionRecord(ticker="NVDA", qty=10.0, avg_price=100.0)])
+    execution = FakeExecution(broker)
+    journal = FakeJournal([_buy_entry("NVDA", datetime(2026, 6, 18, tzinfo=timezone.utc))])
+    orch = _orch(data, execution, journal, FakeStrategy())
+
+    orch._run_exits(cycle_id="2026-06-20T10", as_of=None, as_of_date=_dt.date(2026, 6, 20))
+
+    assert len(execution.placed) == 1
+    order = execution.placed[0]
+    assert order.reason == "stop_loss"
