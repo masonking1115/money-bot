@@ -16,7 +16,7 @@ from moneybot.execution.models import PositionRecord
 if TYPE_CHECKING:
     from moneybot.execution.models import Fill
 
-_FLAT = 1e-9
+_FLAT = 1e-6  # below any real (incl. fractional) share size; above IEEE-754 rounding noise
 
 
 def apply_fill(current: PositionRecord | None, fill: Fill) -> PositionRecord | None:
@@ -31,9 +31,11 @@ def apply_fill(current: PositionRecord | None, fill: Fill) -> PositionRecord | N
     if abs(new_qty) < _FLAT:
         return None  # position closed out
 
-    same_direction = old_qty == 0.0 or (old_qty > 0) == (new_qty > 0)
+    # Same direction iff both signs agree. Opening from flat (old_qty == 0) lands in
+    # `not same_direction` below, which correctly sets the basis to the fill price.
+    same_direction = (old_qty > 0) == (new_qty > 0)
     if not same_direction:
-        new_avg = fill.avg_price  # crossed zero: remaining shares are at the fill price
+        new_avg = fill.avg_price  # opened from flat / crossed zero: basis is the fill price
     elif abs(new_qty) > abs(old_qty):
         # adding in the same direction -> weighted-average cost
         new_avg = (abs(old_qty) * old_avg + abs(signed) * fill.avg_price) / abs(new_qty)

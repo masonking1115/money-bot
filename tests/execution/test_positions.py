@@ -56,3 +56,18 @@ def test_crossing_through_zero_resets_avg_to_fill_price():
     start = PositionRecord(ticker="NVDA", qty=10.0, avg_price=100.0)
     r = apply_fill(start, _fill("sell", 15, 130.0))
     assert r.qty == -5.0 and r.avg_price == 130.0
+
+
+def test_add_to_short_weighted_average():
+    # short 5 @ 200, short 3 more @ 190 -> short 8 at (5*200 + 3*190)/8 = 196.25
+    start = PositionRecord(ticker="NVDA", qty=-5.0, avg_price=200.0)
+    r = apply_fill(start, _fill("short", 3, 190.0))
+    assert r.qty == -8.0
+    assert abs(r.avg_price - 196.25) < 1e-9
+
+
+def test_crossing_through_zero_short_to_long():
+    # short 5, buy 8 -> net long 3 at the fill price
+    start = PositionRecord(ticker="NVDA", qty=-5.0, avg_price=200.0)
+    r = apply_fill(start, _fill("buy", 8, 185.0))
+    assert r.qty == 3.0 and r.avg_price == 185.0
