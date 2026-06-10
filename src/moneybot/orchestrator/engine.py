@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Callable
 from moneybot.execution.models import OrderRequest
 from moneybot.orchestrator.exits import evaluate_exits
 from moneybot.orchestrator.models import CycleResult
-from moneybot.orchestrator.portfolio import mark_price
+from moneybot.orchestrator.portfolio import build_portfolio_state, mark_price
 from moneybot.risk.kill_switch import kill_switch_active
 
 if TYPE_CHECKING:
@@ -70,8 +70,60 @@ class Orchestrator:
             self.journal.append("skip", None, {"reason": "market_closed"})
             return CycleResult(status="skipped", reason="market_closed", cycle_id=cycle_id)
 
-        # Exits + entry pipeline added in Tasks 8-9.
-        return CycleResult(status="completed", cycle_id=cycle_id)
+        as_of_date = as_of if as_of is not None else now.date()
+
+        # 1. Mechanical exits on existing positions (before taking on new ones).
+        exit_fills = self._run_exits(cycle_id=cycle_id, as_of_date=as_of_date)
+
+        # 2. Research -> Analyst.
+        research = self.research.research_universe(as_of=as_of)
+        plans = self.analyst.analyze(research, as_of=as_of)
+        self.journal.append("plans", None, {"count": len(plans)})
+
+        # 3. Portfolio snapshot (marked to market) with today's P&L for the breaker.
+        account = self.execution.broker.get_account()
+        day_pnl = self.sod_equity.day_pnl_pct(account.equity, as_of_date)
+        portfolio = build_portfolio_state(
+            broker=self.execution.broker,
+            data_layer=self.data,
+            settings=self.settings,
+            as_of=as_of,
+            day_pnl_pct=day_pnl,
+        )
+
+        # 4. Risk Engine -> entry execution.
+        assessment = self.risk.assess(plans, portfolio, as_of=as_of)
+        if assessment.halted:
+            entry_fills = []
+        else:
+            entry_fills = self.execution.execute(assessment, cycle_id=cycle_id)
+
+        # Journal buy fills with their exit plan so the exit loop can time-stop later.
+        plan_by_ticker = {p.ticker: p for p in plans}
+        for fill in entry_fills:
+            if fill.status == "filled" and fill.side == "buy":
+                plan = plan_by_ticker.get(fill.ticker)
+                self.journal.append(
+                    "fill",
+                    fill.ticker,
+                    {
+                        "side": "buy",
+                        "shares": fill.filled_qty,
+                        "price": fill.avg_price,
+                        "exit_plan": plan.exit_plan.model_dump() if plan else None,
+                    },
+                )
+
+        reconciliation = self.execution.reconcile()
+        return CycleResult(
+            status="completed",
+            cycle_id=cycle_id,
+            plans_proposed=len(plans),
+            entry_fills=entry_fills,
+            exit_fills=exit_fills,
+            halted_by_risk=assessment.halted,
+            reconciliation=reconciliation,
+        )
 
     def _markable(self, ticker: str) -> bool:
         u = self.data.universe
