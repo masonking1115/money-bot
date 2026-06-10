@@ -39,6 +39,16 @@ class Settings(BaseSettings):
     rs_lookback_days: int = 20    # bar lookback for relative-strength vs the benchmark
     rs_timeframe: str = "1d"      # bar timeframe for relative-strength (yfinance interval)
 
+    # Risk Engine
+    daily_loss_limit_pct: float = 0.03   # halt new entries when day P&L <= -3% of equity
+    earnings_blackout_days: int = 3      # no new entry within N days before a known earnings date
+    min_dollar_volume: float = 5_000_000.0  # min avg daily $-volume for a name to be tradeable
+    target_volatility: float = 0.02      # per-bar return-stddev target for volatility-scaling
+    hedge_ratio: float = 0.5             # fraction of gross long hedged via the benchmark
+    risk_timeframe: str = "1d"           # bar timeframe for risk metrics (vol/liquidity/price)
+    risk_lookback_days: int = 20         # bar lookback for risk metrics
+    kill_switch_file: str = "KILL_SWITCH"  # if this file exists, all trading halts immediately
+
 
 class TickerMeta(BaseModel):
     symbol: str

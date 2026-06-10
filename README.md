@@ -35,3 +35,10 @@ uv run pytest -q
   reject the thesis (a malformed response is a safe rejection — never an unverified trade).
   Confirmed proposals carry the strategy's exit plan and the analyst's adjusted conviction. The
   Analyst proposes; it never sizes or places trades (that is the Risk Engine, Phase 7).
+- Phase 7: risk engine — a deterministic, pure-Python layer (moneybot.risk) the agents
+  cannot bypass. It takes the Analyst's TradePlans plus a portfolio snapshot and approves,
+  downsizes, or vetoes each against hard limits: a kill switch and daily-loss circuit
+  breaker halt all new entries; per name it blocks pyramiding and earnings-window entries,
+  checks liquidity and price sanity, then sizes by conviction scaled down for volatility,
+  bounded by per-name, sector-exposure, and cash caps. Every decision records the rule that
+  fired, and an optional SMH hedge offsets sector beta when enabled. No LLM, no network.
