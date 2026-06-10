@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 from moneybot.risk.kill_switch import kill_switch_active
 from moneybot.risk.metrics import average_dollar_volume, realized_volatility
-from moneybot.risk.models import RiskAssessment, RiskDecision
+from moneybot.risk.models import HedgeOrder, RiskAssessment, RiskDecision
 from moneybot.risk.sizing import target_weight
 
 if TYPE_CHECKING:
@@ -87,7 +87,10 @@ class RiskEngine:
                 running_gross += decision.target_weight
                 held.add(plan.ticker)
 
-        return RiskAssessment(decisions=decisions, halted=False)
+        hedge = None
+        if params.hedge_enabled:
+            hedge = self._hedge(portfolio, decisions, as_of)
+        return RiskAssessment(decisions=decisions, halted=False, hedge=hedge)
 
     def _in_earnings_blackout(self, ticker: str, as_of: date | None) -> bool:
         """True when a known earnings date is today..N days ahead of as_of.
@@ -187,4 +190,37 @@ class RiskEngine:
             reference_price=price,
             rules_fired=rules,
             reasoning="approved within limits",
+        )
+
+    def _hedge(
+        self,
+        portfolio: PortfolioState,
+        decisions: list[RiskDecision],
+        as_of: date | None,
+    ) -> HedgeOrder | None:
+        """Short the benchmark to offset a fraction of gross long exposure.
+
+        Gross long = existing long market value + newly approved dollars. Returns
+        None when there is nothing to hedge or the benchmark cannot be priced.
+        """
+        new_long = sum(d.target_dollars for d in decisions if d.approved)
+        gross_long = portfolio.long_market_value + new_long
+        if gross_long <= 0:
+            return None
+
+        benchmark = self.data.universe.benchmark
+        bars = self.data.get_bars(
+            benchmark, self.settings.risk_timeframe, self.settings.risk_lookback_days, as_of=as_of
+        )
+        closes = [] if bars.empty else bars["close"].tolist()
+        price = closes[-1] if closes else None
+        if price is None or price <= 0:
+            return None
+
+        hedge_dollars = gross_long * self.settings.hedge_ratio
+        shares = int(hedge_dollars // price)
+        if shares <= 0:
+            return None
+        return HedgeOrder(
+            ticker=benchmark, side="short", shares=shares, dollars=shares * price
         )

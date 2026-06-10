@@ -7,7 +7,7 @@ from moneybot.config import TickerMeta, Universe
 from moneybot.risk.engine import RiskEngine
 from moneybot.risk.models import PortfolioState, Position
 from moneybot.strategies.catalyst_driven import CatalystDrivenLong
-from moneybot.strategies.models import ExitPlan, StrategyParams  # noqa: F401 – used in Tasks 7-8
+from moneybot.strategies.models import ExitPlan, StrategyParams
 
 
 def _exit():
@@ -249,3 +249,42 @@ def test_volatility_scaling_reduces_size_end_to_end(monkeypatch):
     assert d.target_weight < 0.10          # vol-scaling trimmed it below the cap
     assert d.shares == 14                   # 0.10 * sqrt(0.02) * 100_000 = $1414.2 -> //99 = 14
     assert d.rules_fired == []              # vol-scaling is intrinsic to sizing, not a cap rule
+
+
+def test_no_hedge_when_disabled(monkeypatch):
+    monkeypatch.delenv("MONEYBOT_KILL_SWITCH", raising=False)
+    eng = _engine({"NVDA": _bars([100.0, 100.0, 100.0])})  # default params: hedge off
+    out = eng.assess([_plan("NVDA")], _healthy_portfolio(), as_of=date(2026, 6, 1))
+    assert out.hedge is None
+
+
+def test_hedge_offsets_gross_long_when_enabled(monkeypatch):
+    monkeypatch.delenv("MONEYBOT_KILL_SWITCH", raising=False)
+    strategy = CatalystDrivenLong(StrategyParams(hedge_enabled=True))
+    eng = _engine(
+        {"NVDA": _bars([100.0, 100.0, 100.0]), "SMH": _bars([50.0, 50.0, 50.0])},
+        strategy=strategy,
+    )
+    # one approved name: 0.5 conviction * 0.10 cap = $5,000 long, no prior positions
+    out = eng.assess([_plan("NVDA", conviction=0.5)], _healthy_portfolio(),
+                     as_of=date(2026, 6, 1))
+    assert out.hedge is not None
+    assert out.hedge.ticker == "SMH"
+    assert out.hedge.side == "short"
+    # gross long $5,000 * hedge_ratio 0.5 = $2,500 hedged / $50 SMH = 50 shares
+    assert out.hedge.shares == 50
+    assert out.hedge.dollars == 2_500.0
+
+
+def test_no_hedge_when_no_long_exposure(monkeypatch):
+    monkeypatch.delenv("MONEYBOT_KILL_SWITCH", raising=False)
+    strategy = CatalystDrivenLong(StrategyParams(hedge_enabled=True))
+    eng = _engine({"NVDA": _bars([100.0, 100.0, 100.0], volume=100),  # illiquid -> vetoed
+                   "SMH": _bars([50.0, 50.0, 50.0])}, strategy=strategy)
+    out = eng.assess([_plan("NVDA")], _healthy_portfolio(), as_of=date(2026, 6, 1))
+    assert out.hedge is None  # nothing long -> nothing to hedge
+
+
+def test_risk_engine_is_exported_from_package():
+    from moneybot.risk import RiskEngine as Exported
+    assert Exported is RiskEngine
