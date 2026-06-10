@@ -24,7 +24,9 @@ class OrderRequest(BaseModel):
     side: Side
     quantity: int = Field(gt=0)  # whole shares
     order_type: Literal["market"] = "market"
-    reference_price: float | None = None  # paper broker fills here; live broker ignores it
+    # paper broker fills here; live broker ignores it. ge=0 stops a negative price
+    # reaching a live order; None means "no hint" (paper rejects, live uses the market).
+    reference_price: float | None = Field(default=None, ge=0)
 
 
 class Fill(BaseModel):

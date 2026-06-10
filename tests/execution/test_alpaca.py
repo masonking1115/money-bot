@@ -109,6 +109,34 @@ def test_canceled_and_expired_map_to_rejected(monkeypatch):
         assert fill.status == "rejected" and fill.reason == raw_status
 
 
+def test_duplicate_client_order_id_returns_existing_order(monkeypatch):
+    # A re-run trips Alpaca's duplicate-client_order_id rejection; the broker must
+    # fall back to the already-placed order and return it (idempotent, no re-trade).
+    from moneybot.execution.alpaca import _DuplicateClientOrderId
+
+    b = _broker()
+    submit_calls = []
+
+    def fake_submit(symbol, qty, side, client_order_id):
+        submit_calls.append(client_order_id)
+        raise _DuplicateClientOrderId(client_order_id)
+
+    def fake_fetch(client_order_id):
+        return {
+            "id": "existing-1",
+            "status": "filled",
+            "filled_qty": "10",
+            "filled_avg_price": "100.0",
+        }
+
+    monkeypatch.setattr(b, "_submit_raw", fake_submit)
+    monkeypatch.setattr(b, "_get_by_client_id_raw", fake_fetch)
+    fill = b.place_order(_order(oid="c1:NVDA:buy"))
+    assert fill.broker_order_id == "existing-1"
+    assert fill.status == "filled" and fill.filled_qty == 10
+    assert submit_calls == ["c1:NVDA:buy"]  # submitted once, then fell back to fetch
+
+
 def test_partially_filled_maps_to_accepted(monkeypatch):
     b = _broker()
     monkeypatch.setattr(

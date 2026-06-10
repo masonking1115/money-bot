@@ -11,6 +11,12 @@ The same TradingClient drives Alpaca's paper and live endpoints — `paper=True`
 points at the paper base URL. That is what makes "paper or live by one config
 flag" real. A future IBKR broker implements the same Broker Protocol; nothing
 upstream changes.
+
+Idempotency (a real-money safety property): Alpaca does NOT silently dedup a
+repeated client_order_id — it returns HTTP 422 (code 40010001). So _submit_raw
+detects that case and raises _DuplicateClientOrderId; place_order then fetches
+the already-placed order and returns it as the Fill, so a re-run of the same
+cycle is a safe no-op rather than a crash or a double-trade.
 """
 
 from __future__ import annotations
@@ -30,6 +36,14 @@ _ALPACA_SIDE = {"buy": "buy", "cover": "buy", "sell": "sell", "short": "sell"}
 # Alpaca order status -> our Fill status.
 _FILLED = {"filled"}
 _REJECTED = {"rejected", "canceled", "expired"}
+
+
+class _DuplicateClientOrderId(Exception):
+    """Raised by _submit_raw when Alpaca rejects a re-used client_order_id (422).
+
+    Kept SDK-agnostic so place_order's idempotent fallback is testable without
+    importing alpaca or hitting the network.
+    """
 
 
 class AlpacaBroker:
@@ -61,6 +75,7 @@ class AlpacaBroker:
     def _submit_raw(
         self, symbol: str, qty: int, side: str, client_order_id: str
     ) -> dict[str, Any]:
+        from alpaca.common.exceptions import APIError
         from alpaca.trading.enums import OrderSide, TimeInForce
         from alpaca.trading.requests import MarketOrderRequest
 
@@ -71,7 +86,24 @@ class AlpacaBroker:
             time_in_force=TimeInForce.DAY,
             client_order_id=client_order_id,
         )
-        order = self._get_client().submit_order(req)
+        try:
+            order = self._get_client().submit_order(req)
+        except APIError as exc:
+            # 422 / code 40010001: client_order_id already used. Signal the caller
+            # to fall back to fetching the already-placed order (idempotency).
+            if getattr(exc, "status_code", None) == 422 and (
+                "client_order_id" in str(exc).lower() or "40010001" in str(exc)
+            ):
+                raise _DuplicateClientOrderId(client_order_id) from exc
+            raise
+        return self._order_to_raw(order)
+
+    def _get_by_client_id_raw(self, client_order_id: str) -> dict[str, Any]:
+        order = self._get_client().get_order_by_client_id(client_order_id)
+        return self._order_to_raw(order)
+
+    @staticmethod
+    def _order_to_raw(order: Any) -> dict[str, Any]:
         return {
             "id": str(order.id),
             "status": str(getattr(order.status, "value", order.status)),
@@ -96,9 +128,16 @@ class AlpacaBroker:
     # --- Broker Protocol: pure translation -----------------------------------
 
     def place_order(self, order: OrderRequest) -> Fill:
-        raw = self._submit_raw(
-            order.ticker, order.quantity, _ALPACA_SIDE[order.side], order.client_order_id
-        )
+        try:
+            raw = self._submit_raw(
+                order.ticker, order.quantity, _ALPACA_SIDE[order.side], order.client_order_id
+            )
+        except _DuplicateClientOrderId:
+            # Already placed in a prior run — return the existing order as the Fill.
+            raw = self._get_by_client_id_raw(order.client_order_id)
+        return self._to_fill(order, raw)
+
+    def _to_fill(self, order: OrderRequest, raw: dict[str, Any]) -> Fill:
         status = raw["status"]
         if status in _FILLED:
             our_status: Side = "filled"  # type: ignore[assignment]
