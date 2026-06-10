@@ -49,3 +49,9 @@ uv run pytest -q
   bot's own position ledger (idempotent, crash-safe), and reconciles that ledger against the
   broker — report-only, never auto-trading to paper over a discrepancy. A future broker (e.g.
   IBKR) is just one more implementation of the same Broker seam.
+- Phase 9: orchestrator — the conductor (moneybot.orchestrator) that runs one full trading
+  cycle end-to-end: it checks the kill switch and market hours, closes any positions that hit
+  their stop-loss / profit-target / time-stop, then runs research → analyst → a marked-to-market
+  portfolio snapshot → risk engine → entry execution, and journals every step before reconciling
+  against the broker. Every component is injected, so the whole cycle runs in tests with fakes —
+  no network, no LLM, an injected clock. `build_orchestrator` wires the entire bot from settings.
