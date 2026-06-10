@@ -11,6 +11,7 @@ come from Settings. Every decision records the rule(s) that fired.
 from __future__ import annotations
 
 from datetime import date
+import math
 from typing import TYPE_CHECKING
 
 from moneybot.risk.kill_switch import kill_switch_active
@@ -138,7 +139,9 @@ class RiskEngine:
         )
         closes = [] if bars.empty else bars["close"].tolist()
         volumes = [] if bars.empty else bars["volume"].tolist()
-        price = closes[-1] if closes else None
+        price = next(
+            (c for c in reversed(closes) if c is not None and math.isfinite(c)), None
+        )
         if price is None or price <= 0:
             return self._veto(plan, "sanity", "no valid reference price")
 

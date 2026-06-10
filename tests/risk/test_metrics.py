@@ -31,3 +31,11 @@ def test_average_dollar_volume_means_price_times_volume():
 def test_average_dollar_volume_none_when_no_pairs():
     assert average_dollar_volume([], []) is None
     assert average_dollar_volume([None], [None]) is None
+
+
+def test_realized_volatility_skips_nan_values():
+    assert realized_volatility([100.0, float("nan"), 110.0, 99.0]) == pytest.approx(0.02**0.5)
+
+
+def test_average_dollar_volume_skips_nan():
+    assert average_dollar_volume([100.0, float("nan")], [10, 5]) == 1000.0

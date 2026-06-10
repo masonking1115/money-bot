@@ -7,6 +7,7 @@ is not computable so the engine can veto on missing data rather than guess.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 
 
@@ -16,7 +17,7 @@ def realized_volatility(closes: Sequence[float | None]) -> float | None:
     None if fewer than three valid closes (need >=2 returns for a sample stddev).
     A flat series returns 0.0.
     """
-    vals = [c for c in closes if c is not None]
+    vals = [c for c in closes if c is not None and math.isfinite(c)]
     if len(vals) < 3:
         return None
     returns = [(vals[i] / vals[i - 1]) - 1.0 for i in range(1, len(vals)) if vals[i - 1] != 0]
@@ -32,7 +33,11 @@ def average_dollar_volume(
     volumes: Sequence[float | None],
 ) -> float | None:
     """Mean of close*volume over bars where both are present. None if no such bar."""
-    pairs = [(c, v) for c, v in zip(closes, volumes) if c is not None and v is not None]
+    pairs = [
+        (c, v)
+        for c, v in zip(closes, volumes)
+        if c is not None and v is not None and math.isfinite(c) and math.isfinite(v)
+    ]
     if not pairs:
         return None
     return sum(c * v for c, v in pairs) / len(pairs)

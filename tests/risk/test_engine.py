@@ -313,3 +313,24 @@ def test_hedge_includes_existing_long_and_excludes_shorts(monkeypatch):
     # the benchmark was priced point-in-time (as_of threaded through)
     smh_call = next(c for c in eng.data.calls if c["ticker"] == "SMH")
     assert smh_call["as_of"] == date(2026, 6, 1)
+
+
+def test_nan_tipped_price_bar_does_not_crash(monkeypatch):
+    monkeypatch.delenv("MONEYBOT_KILL_SWITCH", raising=False)
+    # A NaN latest close (halted/holiday/newly-listed bar) must not crash assess();
+    # the engine falls back to the last finite close as the reference price.
+    eng = _engine({"NVDA": _bars([100.0, 100.0, float("nan")])})
+    out = eng.assess([_plan("NVDA", conviction=0.5)], _healthy_portfolio(),
+                     as_of=date(2026, 6, 1))
+    d = out.decisions[0]
+    assert d.approved is True
+    assert d.reference_price == 100.0   # fell back to the last finite close
+    assert d.shares == 50
+
+
+def test_all_nan_prices_vetoed_as_sanity(monkeypatch):
+    monkeypatch.delenv("MONEYBOT_KILL_SWITCH", raising=False)
+    eng = _engine({"NVDA": _bars([float("nan"), float("nan"), float("nan")])})
+    out = eng.assess([_plan("NVDA")], _healthy_portfolio(), as_of=date(2026, 6, 1))
+    assert out.decisions[0].approved is False
+    assert "sanity" in out.decisions[0].rules_fired
