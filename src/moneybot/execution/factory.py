@@ -16,6 +16,9 @@ from moneybot.execution.paper import PaperBroker
 from moneybot.execution.store import PositionStore
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    from datetime import datetime
+
     from moneybot.config import Settings
     from moneybot.execution.broker import Broker
 
@@ -25,6 +28,7 @@ def build_execution_adapter(
     settings: Settings,
     broker: Broker | None = None,
     store: PositionStore | None = None,
+    clock: Callable[[], datetime] | None = None,
 ) -> ExecutionAdapter:
     if store is None:
         store = PositionStore(settings.data_dir)
@@ -39,6 +43,6 @@ def build_execution_adapter(
                 paper=False,
             )
         else:
-            broker = PaperBroker(starting_cash=settings.paper_starting_cash)
+            broker = PaperBroker(starting_cash=settings.paper_starting_cash, clock=clock)
 
     return ExecutionAdapter(broker=broker, store=store)

@@ -1,7 +1,10 @@
+from datetime import datetime, timezone
+
 from moneybot.config import Settings
 from moneybot.execution.adapter import ExecutionAdapter
 from moneybot.execution.alpaca import AlpacaBroker
 from moneybot.execution.factory import build_execution_adapter
+from moneybot.execution.models import OrderRequest
 from moneybot.execution.paper import PaperBroker
 
 
@@ -31,3 +34,26 @@ def test_broker_override_is_honored(tmp_path):
     sentinel = PaperBroker(starting_cash=1.0)
     adapter = build_execution_adapter(settings=settings, broker=sentinel)
     assert adapter.broker is sentinel  # override wins, no Alpaca built
+
+
+# H1 regression: injected clock must reach PaperBroker fills -----------------
+
+def test_injected_clock_timestamps_fills(tmp_path):
+    """H1: build_execution_adapter passes clock -> PaperBroker; fill.ts == clock time."""
+    fixed_time = datetime(2025, 1, 15, 9, 30, tzinfo=timezone.utc)
+    sim_clock = lambda: fixed_time
+
+    settings = Settings(mode="paper", data_dir=str(tmp_path), paper_starting_cash=10_000.0)
+    adapter = build_execution_adapter(settings=settings, clock=sim_clock)
+
+    order = OrderRequest(
+        client_order_id="test:NVDA:buy",
+        ticker="NVDA",
+        side="buy",
+        quantity=1,
+        reference_price=100.0,
+    )
+    fill = adapter.broker.place_order(order)
+
+    assert fill.status == "filled"
+    assert fill.ts == fixed_time

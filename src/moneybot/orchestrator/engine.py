@@ -190,6 +190,7 @@ class Orchestrator:
                 side="sell",
                 quantity=sig.shares,
                 reference_price=sig.reference_price,
+                reason=sig.reason,
             )
             fill = self.execution.place(order)
             self.journal.append(

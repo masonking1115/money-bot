@@ -27,6 +27,7 @@ class OrderRequest(BaseModel):
     # paper broker fills here; live broker ignores it. ge=0 stops a negative price
     # reaching a live order; None means "no hint" (paper rejects, live uses the market).
     reference_price: float | None = Field(default=None, ge=0)
+    reason: str = ""  # exit reason (e.g. "stop_loss"); propagated to the Fill for trade log
 
 
 class Fill(BaseModel):
