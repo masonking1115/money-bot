@@ -210,7 +210,10 @@ class RiskEngine:
 
         benchmark = self.data.universe.benchmark
         bars = self.data.get_bars(
-            benchmark, self.settings.risk_timeframe, self.settings.risk_lookback_days, as_of=as_of
+            benchmark,
+            self.settings.risk_timeframe,
+            self.settings.risk_lookback_days,
+            as_of=as_of,
         )
         closes = [] if bars.empty else bars["close"].tolist()
         price = closes[-1] if closes else None

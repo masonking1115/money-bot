@@ -288,3 +288,28 @@ def test_no_hedge_when_no_long_exposure(monkeypatch):
 def test_risk_engine_is_exported_from_package():
     from moneybot.risk import RiskEngine as Exported
     assert Exported is RiskEngine
+
+
+def test_hedge_includes_existing_long_and_excludes_shorts(monkeypatch):
+    monkeypatch.delenv("MONEYBOT_KILL_SWITCH", raising=False)
+    strategy = CatalystDrivenLong(StrategyParams(hedge_enabled=True))
+    eng = _engine(
+        {"NVDA": _bars([100.0, 100.0, 100.0]), "SMH": _bars([50.0, 50.0, 50.0])},
+        strategy=strategy,
+    )
+    port = PortfolioState(
+        equity=100_000.0, cash=100_000.0,
+        positions=[
+            Position(ticker="AMD", shares=300, market_value=30_000.0),       # long, counts
+            Position(ticker="SHORTX", shares=-100, market_value=-5_000.0),   # short, excluded
+        ],
+    )
+    out = eng.assess([_plan("NVDA", conviction=0.5)], port, as_of=date(2026, 6, 1))
+    # gross long = existing $30,000 (the short is excluded) + new $5,000 = $35,000
+    # hedge = $35,000 * 0.5 hedge_ratio = $17,500 / $50 SMH = 350 shares
+    assert out.hedge is not None
+    assert out.hedge.shares == 350
+    assert out.hedge.dollars == 17_500.0
+    # the benchmark was priced point-in-time (as_of threaded through)
+    smh_call = next(c for c in eng.data.calls if c["ticker"] == "SMH")
+    assert smh_call["as_of"] == date(2026, 6, 1)
