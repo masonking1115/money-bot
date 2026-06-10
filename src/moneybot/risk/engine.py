@@ -219,7 +219,9 @@ class RiskEngine:
             as_of=as_of,
         )
         closes = [] if bars.empty else bars["close"].tolist()
-        price = closes[-1] if closes else None
+        price = next(
+            (c for c in reversed(closes) if c is not None and math.isfinite(c)), None
+        )
         if price is None or price <= 0:
             return None
 

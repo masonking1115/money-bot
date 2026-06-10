@@ -334,3 +334,32 @@ def test_all_nan_prices_vetoed_as_sanity(monkeypatch):
     out = eng.assess([_plan("NVDA")], _healthy_portfolio(), as_of=date(2026, 6, 1))
     assert out.decisions[0].approved is False
     assert "sanity" in out.decisions[0].rules_fired
+
+
+def test_hedge_handles_nan_tipped_benchmark_close(monkeypatch):
+    monkeypatch.delenv("MONEYBOT_KILL_SWITCH", raising=False)
+    strategy = CatalystDrivenLong(StrategyParams(hedge_enabled=True))
+    eng = _engine(
+        {"NVDA": _bars([100.0, 100.0, 100.0]),
+         "SMH": _bars([50.0, 50.0, float("nan")])},
+        strategy=strategy,
+    )
+    out = eng.assess([_plan("NVDA", conviction=0.5)], _healthy_portfolio(),
+                     as_of=date(2026, 6, 1))
+    # $5,000 long * 0.5 hedge_ratio / $50 (last finite SMH close) = 50 shares — no crash
+    assert out.hedge is not None
+    assert out.hedge.shares == 50
+    assert out.hedge.dollars == 2_500.0
+
+
+def test_no_hedge_when_benchmark_all_nan(monkeypatch):
+    monkeypatch.delenv("MONEYBOT_KILL_SWITCH", raising=False)
+    strategy = CatalystDrivenLong(StrategyParams(hedge_enabled=True))
+    eng = _engine(
+        {"NVDA": _bars([100.0, 100.0, 100.0]),
+         "SMH": _bars([float("nan"), float("nan"), float("nan")])},
+        strategy=strategy,
+    )
+    out = eng.assess([_plan("NVDA", conviction=0.5)], _healthy_portfolio(),
+                     as_of=date(2026, 6, 1))
+    assert out.hedge is None  # benchmark unpriceable -> no hedge, no crash
