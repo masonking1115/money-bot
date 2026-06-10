@@ -42,10 +42,15 @@ class SodEquityStore:
     def _read(self, today: date) -> float | None:
         if not self.path.exists():
             return None
-        data = json.loads(self.path.read_text(encoding="utf-8"))
-        if data.get("date") != today.isoformat():
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+            if data.get("date") != today.isoformat():
+                return None
+            return float(data["equity"])
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            # Corrupt/partial file -> treat as no anchor; the next write re-anchors.
+            # A missing anchor yields 0% day P&L, which safely won't trip the breaker.
             return None
-        return float(data["equity"])
 
     def _write(self, today: date, equity: float) -> None:
         tmp = self.path.with_suffix(".json.tmp")
@@ -113,6 +118,13 @@ def build_portfolio_state(
     equity = account.equity
     if equity <= 0:
         equity = account.cash + sum(p.market_value for p in positions)
+    if equity <= 0:
+        # A non-positive account cannot be sized against; fail loudly rather than
+        # raising an opaque ValidationError inside PortfolioState (or trading on a lie).
+        raise ValueError(
+            f"cannot build PortfolioState: equity is non-positive ({equity}); "
+            "broker reported non-positive equity and cash + marked positions is also <= 0"
+        )
 
     return PortfolioState(
         equity=equity, cash=account.cash, positions=positions, day_pnl_pct=day_pnl_pct

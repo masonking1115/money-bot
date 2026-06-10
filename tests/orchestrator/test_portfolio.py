@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from moneybot.config import TickerMeta, Universe
 from moneybot.execution.models import AccountSnapshot, PositionRecord
@@ -94,3 +95,17 @@ def test_nonpositive_broker_equity_falls_back_to_cash_plus_marks():
     )
     # equity must be > 0 (PortfolioState constraint): cash + marked = 99,800 + 1,200
     assert state.equity == 101_000.0
+
+
+def test_nonpositive_equity_with_shorts_raises_clearly():
+    # broker equity 0 AND cash + (negative) marks <= 0 -> a clear ValueError,
+    # not an opaque PortfolioState ValidationError, and never a trade on a lie.
+    broker = FakeBroker(
+        positions=[PositionRecord(ticker="SMH", qty=-5.0, avg_price=210.0)],
+        equity=0.0, cash=500.0,  # 500 + (-5 * 200) = -500
+    )
+    with pytest.raises(ValueError, match="non-positive"):
+        build_portfolio_state(
+            broker=broker, data_layer=FakeData(), settings=_Settings(),
+            as_of=None, day_pnl_pct=0.0,
+        )

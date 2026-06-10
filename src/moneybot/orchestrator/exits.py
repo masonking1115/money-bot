@@ -32,7 +32,10 @@ def evaluate_exits(
     signals: list[ExitSignal] = []
     for pos in positions:
         shares = int(pos.qty)
-        if shares <= 0:  # longs only
+        if shares <= 0:
+            # Skip shorts (qty < 0) and sub-share fractional longs (0 < qty < 1) —
+            # an ExitSignal is whole-share. This bot's own orders are whole-share, so
+            # a fractional long would only arise from an externally-placed position.
             continue
         price = current_prices.get(pos.ticker)
         if price is None:
