@@ -52,7 +52,7 @@ class AlpacaBroker:
             from alpaca.trading.client import TradingClient
 
             self._client = TradingClient(
-                self._key_id, self._secret_key, paper=self._paper
+                api_key=self._key_id, secret_key=self._secret_key, paper=self._paper
             )
         return self._client
 
@@ -113,6 +113,10 @@ class AlpacaBroker:
             ticker=order.ticker,
             side=order.side,
             status=our_status,  # type: ignore[arg-type]
+            # Phase-1 orders are whole-share, so int() truncation is safe. A partial
+            # fill maps to "accepted"; the ExecutionAdapter records the position only
+            # once the order reaches "filled", so partial qty here is intentionally
+            # not yet persisted.
             filled_qty=int(float(raw["filled_qty"] or 0)),
             avg_price=float(raw["filled_avg_price"] or 0.0),
             ts=self._clock(),
@@ -131,4 +135,8 @@ class AlpacaBroker:
 
     def get_account(self) -> AccountSnapshot:
         raw = self._account_raw()
-        return AccountSnapshot(equity=float(raw["equity"]), cash=float(raw["cash"]))
+        # equity/cash are Optional[str] in the SDK; a funded account always has values,
+        # but guard against None so an unfunded/edge account does not raise TypeError.
+        return AccountSnapshot(
+            equity=float(raw["equity"] or 0.0), cash=float(raw["cash"] or 0.0)
+        )

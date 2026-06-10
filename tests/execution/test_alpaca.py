@@ -86,6 +86,46 @@ def test_rejected_status_maps_through(monkeypatch):
     assert b.place_order(order).status == "rejected"
 
 
+def _order(oid="c", side="buy"):
+    return OrderRequest(
+        client_order_id=oid, ticker="NVDA", side=side, quantity=2, reference_price=10.0
+    )
+
+
+def test_canceled_and_expired_map_to_rejected(monkeypatch):
+    b = _broker()
+    for raw_status in ("canceled", "expired"):
+        monkeypatch.setattr(
+            b,
+            "_submit_raw",
+            lambda symbol, qty, side, client_order_id, s=raw_status: {
+                "id": "x",
+                "status": s,
+                "filled_qty": "0",
+                "filled_avg_price": None,
+            },
+        )
+        fill = b.place_order(_order())
+        assert fill.status == "rejected" and fill.reason == raw_status
+
+
+def test_partially_filled_maps_to_accepted(monkeypatch):
+    b = _broker()
+    monkeypatch.setattr(
+        b,
+        "_submit_raw",
+        lambda symbol, qty, side, client_order_id: {
+            "id": "x",
+            "status": "partially_filled",
+            "filled_qty": "1",
+            "filled_avg_price": "10.0",
+        },
+    )
+    fill = b.place_order(_order())
+    assert fill.status == "accepted"
+    assert fill.filled_qty == 1 and fill.avg_price == 10.0
+
+
 def test_get_positions_parses_signed_qty(monkeypatch):
     b = _broker()
     monkeypatch.setattr(
