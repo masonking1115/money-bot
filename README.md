@@ -55,3 +55,38 @@ uv run pytest -q
   portfolio snapshot → risk engine → entry execution, and journals every step before reconciling
   against the broker. Every component is injected, so the whole cycle runs in tests with fakes —
   no network, no LLM, an injected clock. `build_orchestrator` wires the entire bot from settings.
+
+### Phase 10 — Backtesting harness
+
+The backtester replays historical market data through the *exact same* code the bot
+runs live — research → analyst → risk → execution → exits — one simulated trading day
+at a time, with point-in-time data so it can never peek at the future. It's how we
+check whether the strategy actually has an edge before risking real money.
+
+- **Record once, replay free.** The first run ("record" mode) pays for the AI work
+  (the Claude research + analyst calls) and the data downloads, and caches the AI's
+  per-day decisions and the prices to disk. Every later run ("replay" mode) reuses
+  that cache — no Claude calls, fully offline — so you can sweep Risk Engine settings
+  (position size, stop-loss, profit target, exposure caps) cheaply and instantly.
+  The cache is keyed by date and assumes the research/analyst setup is unchanged;
+  if you change the universe or analyst settings, re-run in record mode.
+- **Daily cadence.** Free price history is deep at daily resolution but only weeks
+  deep intraday, so the backtest runs one cycle per trading day (trading days come
+  from the sector ETF's real bar dates, so holidays are handled automatically).
+- **What you get.** An equity curve (marked to market each day), total return, max
+  drawdown, Sharpe, win rate, trade count, and a side-by-side comparison against just
+  buying and holding the sector ETF (SMH) — printed as a summary and written as CSV +
+  JSON for deeper analysis.
+- **One limitation to know:** the intraday daily-loss circuit breaker can't be
+  exercised by a daily backtest (with one cycle per day there's no intraday move to
+  trip it). It still protects live/paper trading; the backtest just can't test it.
+
+Run it:
+
+```bash
+# First time (pays LLM + download cost, populates the cache):
+uv run python -m moneybot.backtest --start 2024-01-01 --end 2024-12-31 --mode record
+
+# Re-run after changing Risk Engine settings (free, offline):
+uv run python -m moneybot.backtest --start 2024-01-01 --end 2024-12-31 --mode replay
+```
