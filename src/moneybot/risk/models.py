@@ -58,8 +58,8 @@ class HedgeOrder(BaseModel):
 
     ticker: str
     side: Literal["short"]
-    shares: int
-    dollars: float
+    shares: int = Field(gt=0)  # a hedge order always describes a non-trivial short
+    dollars: float = Field(gt=0)
 
 
 class RiskAssessment(BaseModel):
