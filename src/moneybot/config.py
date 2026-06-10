@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     risk_lookback_days: int = 20         # bar lookback for risk metrics
     kill_switch_file: str = "KILL_SWITCH"  # if this file exists, all trading halts immediately
 
+    # Execution
+    paper_starting_cash: float = 100_000.0  # simulated account equity for the paper broker
+
 
 class TickerMeta(BaseModel):
     symbol: str
