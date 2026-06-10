@@ -33,7 +33,9 @@ class ExecutionAdapter:
 
         fills: list[Fill] = []
         for decision in assessment.decisions:
-            if not decision.approved:
+            # Skip vetoes and, defensively, any approved-but-zero-share decision
+            # (the RiskEngine never emits one, but a 0 here would fail OrderRequest).
+            if not decision.approved or decision.shares <= 0:
                 continue
             order = OrderRequest(
                 client_order_id=f"{cycle_id}:{decision.ticker}:buy",

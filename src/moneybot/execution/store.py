@@ -9,6 +9,7 @@ against the broker's reported truth.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -40,7 +41,12 @@ class PositionStore:
             "positions": {t: p.model_dump() for t, p in positions.items()},
             "applied": sorted(applied),
         }
-        self.path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        # Atomic write: a crash mid-write must never corrupt the position ledger.
+        # Write to a temp file in the same directory, then os.replace (atomic on the
+        # same volume on both POSIX and Windows).
+        tmp = self.path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        os.replace(tmp, self.path)
 
     def get_all(self) -> list[PositionRecord]:
         positions, _ = self._read()

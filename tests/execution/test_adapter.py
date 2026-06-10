@@ -11,12 +11,16 @@ class FakeBroker:
 
     def __init__(self):
         self.orders = []
+        self._fills = {}  # client_order_id -> Fill (idempotent, like a real broker)
         self._seq = 0
 
     def place_order(self, order):
+        prior = self._fills.get(order.client_order_id)
+        if prior is not None:
+            return prior  # repeated order_id: return the original fill, do not re-trade
         self.orders.append(order)
         self._seq += 1
-        return Fill(
+        fill = Fill(
             client_order_id=order.client_order_id,
             broker_order_id=f"fake-{self._seq}",
             ticker=order.ticker,
@@ -26,6 +30,8 @@ class FakeBroker:
             avg_price=order.reference_price,
             ts=datetime(2026, 6, 9, tzinfo=timezone.utc),
         )
+        self._fills[order.client_order_id] = fill
+        return fill
 
     def get_positions(self):
         return []
@@ -67,6 +73,18 @@ def test_execute_places_approved_orders_and_updates_store(tmp_path):
     assert store.get_all()[0].ticker == "NVDA" and store.get_all()[0].qty == 10.0
 
 
+def test_approved_with_zero_shares_is_skipped(tmp_path):
+    # The RiskEngine never emits this, but guard against quantity=0 reaching OrderRequest.
+    broker = FakeBroker()
+    store = PositionStore(tmp_path)
+    adapter = ExecutionAdapter(broker=broker, store=store)
+    bad = RiskDecision(
+        ticker="NVDA", approved=True, shares=0, reference_price=100.0, reasoning="zero"
+    )
+    fills = adapter.execute(RiskAssessment(decisions=[bad]), cycle_id="c")
+    assert fills == [] and broker.orders == [] and store.get_all() == []
+
+
 def test_halted_assessment_places_nothing(tmp_path):
     broker = FakeBroker()
     adapter = ExecutionAdapter(broker=broker, store=PositionStore(tmp_path))
@@ -103,6 +121,7 @@ def test_rerun_is_idempotent(tmp_path):
     adapter.execute(assessment, cycle_id="cycle-1")
     adapter.execute(assessment, cycle_id="cycle-1")  # same cycle id
     assert store.get_all()[0].qty == 10.0  # not 20
+    assert len(broker.orders) == 1  # broker saw the order once; the rerun was a no-op
 
 
 def test_reconcile_reports_drift(tmp_path):
