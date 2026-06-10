@@ -156,3 +156,24 @@ def test_rejected_fill_does_not_update_store(tmp_path):
     fills = adapter.execute(RiskAssessment(decisions=[_approved()]), cycle_id="c")
     assert fills[0].status == "rejected"
     assert store.get_all() == []
+
+
+def test_place_sell_updates_store(tmp_path):
+    from moneybot.execution.models import OrderRequest
+
+    broker = FakeBroker()
+    store = PositionStore(tmp_path)
+    adapter = ExecutionAdapter(broker=broker, store=store)
+    # open a long first
+    adapter.execute(RiskAssessment(decisions=[_approved(shares=10, price=100.0)]), cycle_id="c1")
+    # now place a direct sell of the whole position
+    sell = OrderRequest(
+        client_order_id="c2:NVDA:exit",
+        ticker="NVDA",
+        side="sell",
+        quantity=10,
+        reference_price=130.0,
+    )
+    fill = adapter.place(sell)
+    assert fill.status == "filled" and fill.side == "sell"
+    assert store.get_all() == []  # position closed

@@ -44,7 +44,7 @@ class ExecutionAdapter:
                 quantity=decision.shares,
                 reference_price=decision.reference_price,
             )
-            fills.append(self._place(order))
+            fills.append(self.place(order))
 
         hedge = assessment.hedge
         if hedge is not None and hedge.shares > 0:
@@ -55,11 +55,15 @@ class ExecutionAdapter:
                 quantity=hedge.shares,
                 reference_price=hedge.dollars / hedge.shares,
             )
-            fills.append(self._place(order))
+            fills.append(self.place(order))
 
         return fills
 
-    def _place(self, order: OrderRequest) -> Fill:
+    def place(self, order: OrderRequest) -> Fill:
+        """Place a single order and update the store on a fill.
+
+        Used by execute() for entries and by the orchestrator for exit sells.
+        """
         fill = self.broker.place_order(order)
         if fill.status == "filled" and fill.filled_qty > 0:
             self.store.apply_fill(fill)
