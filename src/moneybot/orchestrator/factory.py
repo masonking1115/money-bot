@@ -6,6 +6,8 @@ else is built here from the existing component factories, sharing one injected
 clock so the journal's timestamps line up with the cycle (and a later backtest
 can replay dated cycles). The LLM is optional: omit it in production to lazily
 construct the real client, inject a fake in tests.
+
+research/analyst may be injected pre-built (the backtest harness supplies caching wrappers).
 """
 
 from __future__ import annotations
@@ -38,15 +40,19 @@ def build_orchestrator(
     llm: LLMClient | None = None,
     clock: Callable[[], datetime] | None = None,
     market_open: Callable[[datetime], bool] = is_market_open,
+    research: object | None = None,
+    analyst: object | None = None,
 ) -> Orchestrator:
     clock = clock or (lambda: datetime.now(timezone.utc))
 
-    research = build_research_agent(
-        settings=settings, data_layer=data_layer, retriever=retriever, llm=llm
-    )
-    analyst = build_analyst_agent(
-        settings=settings, data_layer=data_layer, retriever=retriever, llm=llm
-    )
+    if research is None:
+        research = build_research_agent(
+            settings=settings, data_layer=data_layer, retriever=retriever, llm=llm
+        )
+    if analyst is None:
+        analyst = build_analyst_agent(
+            settings=settings, data_layer=data_layer, retriever=retriever, llm=llm
+        )
     risk = build_risk_engine(settings=settings, data_layer=data_layer)
     execution = build_execution_adapter(settings=settings)
     journal = JournalStore(settings.data_dir, clock=clock)

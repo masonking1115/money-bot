@@ -56,3 +56,24 @@ def test_market_open_defaults_to_real_predicate(tmp_path):
     from datetime import datetime as dt
     from zoneinfo import ZoneInfo
     assert orch._market_open(dt(2026, 6, 13, 12, 0, tzinfo=ZoneInfo("America/New_York"))) is False
+
+
+def test_build_orchestrator_uses_injected_research_and_analyst(tmp_path):
+    # When research/analyst are supplied, the factory must use them verbatim
+    # (not build its own from the LLM) — this is the backtest's injection seam.
+    settings = Settings(mode="paper", data_dir=str(tmp_path))
+
+    sentinel_research = object()
+    sentinel_analyst = object()
+
+    orch = build_orchestrator(
+        settings=settings,
+        data_layer=FakeData(),
+        retriever=FakeRetriever(),
+        llm=FakeLLM(),
+        research=sentinel_research,
+        analyst=sentinel_analyst,
+    )
+
+    assert orch.research is sentinel_research
+    assert orch.analyst is sentinel_analyst
