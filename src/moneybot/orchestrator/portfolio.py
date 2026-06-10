@@ -15,8 +15,12 @@ from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from moneybot.risk.models import PortfolioState, Position
+
 if TYPE_CHECKING:
+    from moneybot.config import Settings
     from moneybot.data_layer import DataLayer
+    from moneybot.execution.broker import Broker
 
 
 class SodEquityStore:
@@ -68,3 +72,48 @@ def mark_price(
     bars = data_layer.get_bars(ticker, timeframe, lookback, as_of=as_of)
     closes = [] if bars.empty else bars["close"].tolist()
     return last_finite_close(closes)
+
+
+def build_portfolio_state(
+    *,
+    broker: Broker,
+    data_layer: DataLayer,
+    settings: Settings,
+    as_of: date | None,
+    day_pnl_pct: float,
+) -> PortfolioState:
+    """Translate the broker snapshot into the Risk Engine's PortfolioState.
+
+    Each holding is marked to its current price (cost-basis fallback when a price
+    is missing or the ticker is not markable). Equity comes from the broker; if the
+    broker reports a non-positive equity, fall back to cash + marked value so the
+    PortfolioState's gt=0 constraint holds.
+    """
+    account = broker.get_account()
+    universe = data_layer.universe
+    markable = set(universe.symbols) | {universe.benchmark}
+
+    positions: list[Position] = []
+    for rec in broker.get_positions():
+        price: float | None = None
+        if rec.ticker in markable:
+            price = mark_price(
+                data_layer=data_layer,
+                ticker=rec.ticker,
+                timeframe=settings.risk_timeframe,
+                lookback=settings.risk_lookback_days,
+                as_of=as_of,
+            )
+        if price is None:
+            price = rec.avg_price  # mark-to-cost fallback
+        positions.append(
+            Position(ticker=rec.ticker, shares=rec.qty, market_value=rec.qty * price)
+        )
+
+    equity = account.equity
+    if equity <= 0:
+        equity = account.cash + sum(p.market_value for p in positions)
+
+    return PortfolioState(
+        equity=equity, cash=account.cash, positions=positions, day_pnl_pct=day_pnl_pct
+    )
